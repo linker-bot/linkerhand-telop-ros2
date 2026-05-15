@@ -1,0 +1,143 @@
+import numpy as np
+from linkerhand.handcore import HandCore
+
+
+class RightHand:
+    def __init__(self, handcore: HandCore, length=10):
+        self.handcore = handcore
+        self.g_jointpositions = [255] * length
+        self.g_jointvelocity = [255] * length
+        self.last_jointpositions = [255] * length
+        self.last_jointvelocity = [255] * length
+        self.handstate = [0] * length
+
+    def joint_update(self, joint_arc):
+        self.g_jointpositions[0] = joint_arc[0]     # 根部关节
+        self.g_jointpositions[1] = joint_arc[5]     # 侧摆
+        self.g_jointpositions[2] = joint_arc[1]     # 食指根部关节
+        self.g_jointpositions[3] = joint_arc[2]     # 中指根部关节
+        self.g_jointpositions[4] = joint_arc[3]     # 无名指根部关节
+        self.g_jointpositions[5] = joint_arc[4]     # 小指根部关节
+        self.g_jointpositions[6] = joint_arc[6]     # 食指侧摆
+        self.g_jointpositions[7] = joint_arc[8]     # 无名指侧摆
+        self.g_jointpositions[8] = joint_arc[9]     # 小指侧摆
+        self.g_jointpositions[9] = joint_arc[10]    # 旋转
+
+    def speed_update(self):
+        for i in range(len(self.g_jointpositions)):
+            self.g_jointvelocity[i] = 255
+            # lastpos = self.last_jointpositions[i]
+            # position_error = int(abs(self.g_jointpositions[i] - lastpos))
+            # position_derict = 1 if self.g_jointpositions[i] - lastpos > 0 else -1
+            # slow_limit = 4
+            # fast_limit = 10
+            # max_vel = int(self.last_jointvelocity[i] * 2)
+            # mid_vel = int(self.last_jointvelocity[i] * 0.7)
+            # min_vel = int(self.last_jointvelocity[i] * 0.5)
+            # target_vel = self.last_jointvelocity[i]
+            # if self.handstate[i] == 0:  # stop
+            #     if 0 < position_error:
+            #         target_vel = position_error * 5 + 30
+            #         self.handstate[i] = 1
+            # elif self.handstate[i] == 1:  # slow
+            #     if position_error >= fast_limit:
+            #         target_vel = position_error * 5 + 50
+            #         if target_vel > mid_vel:
+            #             target_vel = mid_vel
+            #         self.handstate[i] = 2
+            #     elif position_error == 0:
+            #         self.handstate[i] = 0
+            #         target_vel = position_error * 5 + 100
+            #     else:
+            #         target_vel = position_error * 5 + 100
+            # else:  # fast
+            #     if position_error >= fast_limit:
+            #         target_vel = position_error * 5 + 90
+            #         if target_vel > max_vel:
+            #             target_vel = max_vel
+            #     elif slow_limit < position_error < fast_limit:
+            #         target_vel = position_error * 5 + 60
+            #         if target_vel < mid_vel:
+            #             target_vel = mid_vel
+            #         self.handstate[i] = 3
+            #     elif 0 < position_error <= slow_limit:
+            #         target_vel = position_error * 5 + 40
+            #         if target_vel < min_vel:
+            #             target_vel = min_vel
+            #         self.handstate[i] = 1
+            # self.g_jointvelocity[i] = int(target_vel * 1)
+            # if self.g_jointvelocity[i] > 255:
+            #     self.g_jointvelocity[i] = 255
+
+            # self.last_jointvelocity[i] = self.g_jointvelocity[i]
+            # self.last_jointpositions[i] = self.g_jointpositions[i]
+
+
+class LeftHand:
+    def __init__(self, handcore: HandCore, length=10):
+        self.handcore = handcore
+        self.g_jointpositions = [255] * length
+        self.g_jointvelocity = [255] * length
+        self.last_jointpositions = [255] * length
+        self.last_jointvelocity = [255] * length
+        self.handstate = [0] * length
+
+    def joint_update(self, joint_arc):
+        self.g_jointpositions[0] = joint_arc[0]     # 根部关节
+        self.g_jointpositions[1] = joint_arc[5]     # 侧摆
+        self.g_jointpositions[2] = joint_arc[1]     # 食指根部关节
+        self.g_jointpositions[3] = joint_arc[2]     # 中指根部关节
+        self.g_jointpositions[4] = joint_arc[3]     # 无名指根部关节
+        self.g_jointpositions[5] = joint_arc[4]     # 小指根部关节
+        self.g_jointpositions[6] = joint_arc[6]     # 食指侧摆
+        self.g_jointpositions[7] = joint_arc[8]     # 无名指侧摆
+        self.g_jointpositions[8] = joint_arc[9]     # 小指侧摆
+        self.g_jointpositions[9] = joint_arc[10]    # 旋转
+
+    def speed_update(self):
+        for i in range(len(self.g_jointpositions)):
+            self.g_jointvelocity[i] = 255
+            # lastpos = self.last_jointpositions[i]
+            # position_error = int(abs(self.g_jointpositions[i] - lastpos))
+            # position_derict = 1 if self.g_jointpositions[i] - lastpos > 0 else -1
+            # slow_limit = 4
+            # fast_limit = 10
+            # max_vel = int(self.last_jointvelocity[i] * 2)
+            # mid_vel = int(self.last_jointvelocity[i] * 0.7)
+            # min_vel = int(self.last_jointvelocity[i] * 0.5)
+            # target_vel = self.last_jointvelocity[i]
+            # if self.handstate[i] == 0:  # stop
+            #     if 0 < position_error:
+            #         target_vel = position_error * 5 + 30
+            #         self.handstate[i] = 1
+            # elif self.handstate[i] == 1:  # slow
+            #     if position_error >= fast_limit:
+            #         target_vel = position_error * 5 + 50
+            #         if target_vel > mid_vel:
+            #             target_vel = mid_vel
+            #         self.handstate[i] = 2
+            #     elif position_error == 0:
+            #         self.handstate[i] = 0
+            #         target_vel = position_error * 5 + 100
+            #     else:
+            #         target_vel = position_error * 5 + 100
+            # else:  # fast
+            #     if position_error >= fast_limit:
+            #         target_vel = position_error * 5 + 90
+            #         if target_vel > max_vel:
+            #             target_vel = max_vel
+            #     elif slow_limit < position_error < fast_limit:
+            #         target_vel = position_error * 5 + 60
+            #         if target_vel < mid_vel:
+            #             target_vel = mid_vel
+            #         self.handstate[i] = 3
+            #     elif 0 < position_error <= slow_limit:
+            #         target_vel = position_error * 5 + 40
+            #         if target_vel < min_vel:
+            #             target_vel = min_vel
+            #         self.handstate[i] = 1
+            # self.g_jointvelocity[i] = int(target_vel * 1)
+            # if self.g_jointvelocity[i] > 255:
+            #     self.g_jointvelocity[i] = 255
+            # self.last_jointvelocity[i] = self.g_jointvelocity[i]
+            # self.last_jointpositions[i] = self.g_jointpositions[i]

@@ -1,0 +1,14 @@
+anytree
+colorama
+loguru
+lxml
+numpy
+pyqtgraph
+pyserial
+PyYAML
+scipy>=1.10.0
+six
+tqdm
+transforms3d
+trimesh
+tyro

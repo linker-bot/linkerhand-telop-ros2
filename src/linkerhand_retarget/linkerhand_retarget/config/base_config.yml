@@ -1,0 +1,56 @@
+calibration:
+  fist_extend_ratio: 0.5
+  show_fist: true
+debug:
+  joint_motor_debug_l: false
+  joint_motor_debug_r: false
+  joint_pub_debug: false
+  mapper_debug: false
+humanset:
+  bodyfile: body_unity_pose
+  targethandfile: human_hand_info
+linkereg:
+  password: i
+  port: null
+netpub:
+  ip: 192.168.11.33
+  port: 20008
+serial:
+  auto_scan: false
+  baudrates:
+  - 2000000
+  - 460800
+  - 1000000
+  - 921600
+  exclude_ports: []
+  left:
+    baudrate: 460800
+    port: /dev/ttyUSB1
+  right:
+    baudrate: 460800
+    port: /dev/ttyUSB0
+  serial_debug: false
+system:
+  can:
+    bitrate: 1000000
+    dofs: 25
+    id: 40
+  datasource_type: motion
+  leftpub: true
+  motion_device: eric
+  motion_type: linkerforce
+  retargeting_type: projection
+  rightpub: true
+  robotname_l: l25
+  robotname_r: l25
+  sapientype: left
+  usecan: false
+  usegui: false
+  usenetpub: false
+  usesapien: true
+  useudp: true
+  useudpserver: true
+udp:
+  ip: 192.168.11.88
+  port: 8888
+  serverport: 5551
