@@ -264,7 +264,7 @@ class RightHand:
         self._apply_thumb_motor_calibration(qpos)
         self._apply_motor_constraints()
         self.g_jointpositions = self._apply_smooth(self.g_jointpositions)
-        print(self.g_jointpositions[5],self.g_jointpositions[10])
+        # print(self.g_jointpositions[5],self.g_jointpositions[10])
         # for i in range(len(self.g_jointpositions)):
         #     if i % 5 != 0:
         #         self.g_jointpositions[i] = 0

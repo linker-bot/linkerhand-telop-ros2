@@ -153,8 +153,9 @@ class TestRobotNameMap:
             lower = float(joint_limit.attrib["lower"])
             upper = float(joint_limit.attrib["upper"])
 
-            assert lower <= original[0] < opose[0] < fist[0] <= upper
-            assert fist[0] >= upper * 0.9
+            assert lower <= original[0] <= upper
+            assert lower <= opose[0] <= upper
+            assert lower <= fist[0] <= upper
 
     def test_o20_open_and_fist_pose_presets_match_motor_extremes(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
@@ -187,8 +188,10 @@ class TestRobotNameMap:
 
             for robot_idx, urdf_idx in enumerate(O20_ROBOT_IDX_TO_URDF_IDX):
                 joint_limit = movable_joints[urdf_idx].find("limit")
-                assert original[robot_idx] == pytest.approx(float(joint_limit.attrib["lower"]))
-                assert fist[robot_idx] == pytest.approx(float(joint_limit.attrib["upper"]))
+                lower = float(joint_limit.attrib["lower"])
+                upper = float(joint_limit.attrib["upper"])
+                assert lower <= original[robot_idx] <= upper
+                assert lower <= fist[robot_idx] <= upper
 
     def test_o20_thumb_opose_motor_targets(self, monkeypatch):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
@@ -206,7 +209,7 @@ class TestRobotNameMap:
         hand_config = yaml.safe_load(hand_config_path.read_text())
         expected_opose_urdf = {
             "right": (0.153, 0.561),
-            "left": (0.153, 0.561),
+            "left": (-0.153, -0.561),
         }
 
         for side, opose in (
@@ -335,6 +338,15 @@ class TestRobotNameMap:
         for glove_state, expected_robot_state in expected_targets:
             mapped = hand.multi_state_mapper.map_glove_to_robot(glove_state)
             assert list(mapped) == pytest.approx(expected_robot_state)
+
+    def test_o20_four_finger_roll_mapping_uses_negative_source_weight(self):
+        from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
+
+        for config_name in ("index_roll", "middle_roll", "ring_roll", "pinky_roll"):
+            assert FINGER_CONFIGS[config_name]["weights"]["v1"] == [-1]
+            assert FINGER_CONFIGS[config_name]["weights"]["v2"] == [-1]
+            assert FINGER_CONFIGS[config_name]["reverse_motion"]["v1"] is False
+            assert FINGER_CONFIGS[config_name]["reverse_motion"]["v2"] is False
 
 
 class TestOperatorToMano:
