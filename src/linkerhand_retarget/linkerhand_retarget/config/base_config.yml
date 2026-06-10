@@ -24,10 +24,10 @@ serial:
   - 921600
   exclude_ports: []
   left:
-    baudrate: 460800
+    baudrate: 2000000
     port: /dev/ttyUSB1
   right:
-    baudrate: 460800
+    baudrate: 2000000
     port: /dev/ttyUSB0
   serial_debug: false
 system:
@@ -41,8 +41,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: l25
-  robotname_r: l25
+  robotname_l: o20
+  robotname_r: o20
   sapientype: left
   usecan: false
   usegui: false

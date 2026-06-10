@@ -1,6 +1,6 @@
 # LinkerFFG 机械手驱动模块
 
-LinkerFFG (O6/L7/L10/G20/R20/L25) 机械手的 ROS2 驱动模块，通过串口控制机械手，支持数据手套实时映射。
+LinkerFFG (O6/L7/L10/G20/O20/O30/R20/L25) 机械手的 ROS2 驱动模块，通过串口控制机械手，支持数据手套实时映射。
 
 ---
 
@@ -32,7 +32,7 @@ ls -l /dev/ttyUSB*
 ```yaml
 system:
   motion_type: linkerforce    # 数据手套类型：linkerforce（必须）
-  robotname_r: l25            # 右手机械手型号：o6 / l7 / l10 / g20 / r20 / l25
+  robotname_r: l25            # 右手机械手型号：o6 / l7 / l10 / g20 / o20 / o30 / r20 / l25
   robotname_l: l25            # 左手机械手型号
 
 serial:
@@ -82,9 +82,21 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 | L7 | 7 | 7 自由度（拇指增加横滚） |
 | L10 | 10 | 10 自由度工业款 |
 | G20 | 20 | 20 自由度工业款 |
+| O20 | 20 | O 系列独立 20 自由度型号 |
+| O30 | 20 | 基于 G20 模板初始化的 O30 独立型号 |
 | L25 | 25 | 25 自由度全功能款 |
 
 配置中的 `robotname_r` 和 `robotname_l` 必须与实际连接的机械手型号匹配。
+
+### O20 映射说明
+
+O20 是 O 系列独立型号，不共用 G20 的电机方向表。
+
+- O20 五指张开对应电机值 `0`。
+- O20 握拳对应电机值 `255`。
+- O20 `opose` 的 URDF 姿态目标仍按 `o20_config.py` 中的机器人关节角配置。
+- O20 拇指电机输出与 URDF 姿态目标分层标定：`thumb_cmc_roll` 在 opose 时约输出 `165`，`thumb_cmc_yaw` 在 opose 时约输出 `138`。
+- `original`、`opose`、`fist` 标定锚点输入会在实时滤波前直接返回对应 URDF 姿态目标，保证锚点姿态准确。
 
 ---
 
@@ -118,12 +130,14 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 
 ### 标定流程
 
-1. **五指张开** → 保持 5 秒（电机值 255）
-2. **O 型手势** → 保持 5 秒（电机中间值）
+1. **五指张开** → 保持 5 秒
+2. **O 型手势** → 保持 5 秒
 
 如果 `show_fist: true`，还会出现第三步：
 
-3. **握紧拳头** → 保持 5 秒（电机值 0）
+3. **握紧拳头** → 保持 5 秒
+
+多数已有型号的张开/握拳输出方向由 `hand_config.yml` 中的型号电机表决定。O20 单独定义为张开输出 `0`，握拳输出 `255`。
 
 ### show_fist=true 与 show_fist=false 的区别
 
@@ -251,7 +265,7 @@ ros2 topic pub --once /hand_teleop_param std_msgs/msg/String '{"data": "{\"force
 | 配置项 | 说明 | 可选值 |
 |--------|------|--------|
 | `motion_type` | 数据手套类型 | `linkerforce`（必须） |
-| `robotname_r` | 右手机械手型号 | `o6`, `l7`, `l10`, `g20`, `r20`, `l25` |
+| `robotname_r` | 右手机械手型号 | `o6`, `l7`, `l10`, `g20`, `o20`, `o30`, `r20`, `l25` |
 | `robotname_l` | 左手机械手型号 | 同上 |
 | `retargeting_type` | 重定向类型 | `projection` |
 
@@ -378,6 +392,8 @@ motion/linkerforce/
 │   ├── l10_config.py    # L10 手型配置
 │   ├── l20_config.py    # L20 手型配置
 │   ├── g20_config.py    # G20 手型配置
+│   ├── o20_config.py    # O20 手型配置
+│   ├── o30_config.py    # O30 手型配置
 │   └── o7_config.py     # O7 手型配置
 ├── hand/                # 机械手驱动
 │   ├── linkerforce_o6.py
@@ -385,7 +401,9 @@ motion/linkerforce/
 │   ├── linkerforce_l7.py
 │   ├── linkerforce_l10.py
 │   ├── linkerforce_l20.py
-│   └── linkerforce_g20.py
+│   ├── linkerforce_g20.py
+│   ├── linkerforce_o20.py
+│   └── linkerforce_o30.py
 ├── tmp/                 # 临时文件（标定数据等）
 ├── retarget.py          # ROS 集成层
 └── README.md            # 本文档

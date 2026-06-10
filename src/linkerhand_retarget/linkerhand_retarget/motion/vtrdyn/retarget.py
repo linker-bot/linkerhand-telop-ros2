@@ -49,6 +49,12 @@ class Retarget:
         elif self.righthandtype == RobotName.l6:
             from .hand.vtrdyn_l6 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o20:
+            from .hand.vtrdyn_o20 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o30:
+            from .hand.vtrdyn_o30 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
         elif self.righthandtype == RobotName.l25 \
             or self.righthandtype == RobotName.g20:
             from .hand.vtrdyn_l25 import RightHand
@@ -73,6 +79,12 @@ class Retarget:
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l6:
             from .hand.vtrdyn_l6 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o20:
+            from .hand.vtrdyn_o20 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o30:
+            from .hand.vtrdyn_o30 import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l25 \
             or self.lefthandtype == RobotName.g20:
@@ -191,4 +203,3 @@ class Retarget:
         if not self.initialize_udp():
             self.get_logger().error("初始化配置网络失败")
             return
-

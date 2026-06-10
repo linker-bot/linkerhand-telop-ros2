@@ -12,19 +12,21 @@ This repository contains the standalone ROS2 source workspace for LinkerHand tel
 - Robot model assets
 - Offline unit tests and integration test examples
 
+Current SDK version: `2.12.5`. See [VERSION.md](VERSION.md) for release notes.
+
 <p style="color: #b7791f;"><em>Warning: This release uses a source-workspace delivery path. After <code>colcon build --symlink-install</code>, configuration and robot model assets are still read from the package source tree, so keep the workspace layout shown below. Wheel-style installation or copying only the <code>install/</code> directory is not supported for this release.</em></p>
 
 ## Supported Devices
 
 ### Data Gloves and Robot Hand Models
 
-| Data Glove | O6 | L6 | L7 | L10/L10v7 | L20 | L21/L25 | G20 | Module | Docs |
-|------------|----|----|----|-----------|-----|---------|-----|--------|------|
-| LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README.md) |
-| VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/vtrdyn` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README.md) |
-| LinkerTG / UdexReal | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/udexreal` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README.md) |
-| LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README.md) |
-| LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkereg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README.md) |
+| Data Glove | O6 | L6 | L7 | L10/L10v7 | L20 | L21/L25 | G20 | O20 | O30 | Module | Docs |
+|------------|----|----|----|-----------|-----|---------|-----|-----|-----|--------|------|
+| LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README.md) |
+| VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/vtrdyn` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README.md) |
+| LinkerTG / UdexReal | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/udexreal` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README.md) |
+| LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README.md) |
+| LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkereg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README.md) |
 
 ## ROS2 Compatibility
 
@@ -110,7 +112,7 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `motion_type` | Data glove type | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkereg1`, `linkereg2` |
 | `datasource_type` | Data source type | `motion` |
 | `retargeting_type` | Retargeting type | `projection` |
-| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20` |
+| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30` |
 | `robotname_l` | Left hand robot model | same as above |
 | `motion_device` | Motion device ID, used by selected motion sources | e.g. `eric` |
 

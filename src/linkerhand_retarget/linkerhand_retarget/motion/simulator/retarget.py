@@ -44,7 +44,7 @@ class Retarget():
         if self.righthandtype == RobotName.o7 \
             or self.righthandtype == RobotName.l7 \
             or self.righthandtype == RobotName.o7v1 \
-            or self.righthandtype == RobotName.o7v2:
+            or self.righthandtype == RobotName.o7v3:
             from .hand.simulator_l7 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
         elif self.righthandtype == RobotName.o6:
@@ -52,6 +52,12 @@ class Retarget():
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
         elif self.righthandtype == RobotName.l6:
             from .hand.simulator_l6 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o20:
+            from .hand.simulator_o20 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o30:
+            from .hand.simulator_o30 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
         # elif self.righthandtype == RobotName.l25:
         #     from .hand.simulator_l25 import RightHand
@@ -74,7 +80,7 @@ class Retarget():
         if self.lefthandtype == RobotName.o7 \
             or self.lefthandtype == RobotName.l7 \
             or self.lefthandtype == RobotName.o7v1 \
-            or self.lefthandtype == RobotName.o7v2:
+            or self.lefthandtype == RobotName.o7v3:
             from .hand.simulator_l7 import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.o6:
@@ -82,6 +88,12 @@ class Retarget():
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l6:
             from .hand.simulator_l6 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o20:
+            from .hand.simulator_o20 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o30:
+            from .hand.simulator_o30 import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l25:
             from .hand.simulator_l25 import LeftHand
@@ -229,4 +241,3 @@ class Retarget():
         if not self.initialize_udp():
             self.node.get_logger().error("初始化配置网络失败")
             return
-

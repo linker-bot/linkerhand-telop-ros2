@@ -166,6 +166,12 @@ class Retarget():
         elif self.righthandtype == RobotName.l6:
             from .hand.udexreal_l6 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o20:
+            from .hand.udexreal_o20 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
+        elif self.righthandtype == RobotName.o30:
+            from .hand.udexreal_o30 import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
         # elif self.righthandtype == RobotName.l25:
         #     from .hand.udexreal_l25 import RightHand
         #     self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand])
@@ -195,6 +201,12 @@ class Retarget():
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l6:
             from .hand.udexreal_l6 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o20:
+            from .hand.udexreal_o20 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
+        elif self.lefthandtype == RobotName.o30:
+            from .hand.udexreal_o30 import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand])
         elif self.lefthandtype == RobotName.l25:
             from .hand.udexreal_l25 import LeftHand
@@ -439,4 +451,3 @@ class Retarget():
                 self.lefthand.initialize_mapper()
             else:
                 self.calibration = None
-

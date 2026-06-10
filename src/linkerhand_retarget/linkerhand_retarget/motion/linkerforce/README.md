@@ -1,6 +1,6 @@
 # LinkerFFG Robot Hand Driver Module
 
-LinkerFFG (O6/L7/L10/G20/R20/L25) robot hand ROS2 driver module, controls robot hands via serial port with real-time data glove mapping.
+LinkerFFG (O6/L7/L10/G20/O20/O30/R20/L25) robot hand ROS2 driver module, controls robot hands via serial port with real-time data glove mapping.
 
 ---
 
@@ -33,7 +33,7 @@ Edit `config/base_config.yml` to set robot hand model:
 ```yaml
 system:
   motion_type: linkerforce    # Data glove type: linkerforce (required)
-  robotname_r: l25            # Right hand model: o6 / l7 / l10 / g20 / r20 / l25
+  robotname_r: l25            # Right hand model: o6 / l7 / l10 / g20 / o20 / o30 / r20 / l25
   robotname_l: l25            # Left hand model
 
 serial:
@@ -83,10 +83,22 @@ During calibration, perform three gestures as prompted:
 | L7 | 7 | 7-DOF (thumb with roll) |
 | L10 | 10 | 10-DOF industrial model |
 | G20 | 20 | 20-DOF industrial model |
+| O20 | 20 | Independent 20-DOF O-series model |
+| O30 | 20 | Independent O30 model initialized from the G20 template |
 | R20 | 20 | 20-DOF research model |
 | L25 | 25 | 25-DOF full-featured model |
 
 `robotname_r` and `robotname_l` in config must match the actual connected robot hand models.
+
+### O20 Mapping Notes
+
+O20 is an independent O-series model and does not share the G20 motor direction table.
+
+- O20 open hand maps to motor value `0`.
+- O20 fist maps to motor value `255`.
+- O20 `opose` URDF pose targets remain configured as robot joint angles in `o20_config.py`.
+- O20 thumb motor output is calibrated separately from the URDF pose target: `thumb_cmc_roll` outputs about `165` at opose, and `thumb_cmc_yaw` outputs about `138` at opose.
+- Calibration anchor inputs (`original`, `opose`, `fist`) are returned as exact URDF pose targets before live filtering is applied.
 
 ---
 
@@ -131,12 +143,14 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 
 ### Calibration Process
 
-1. **Open hand** → hold for 5 seconds (motor value 255)
-2. **O-pose** → hold for 5 seconds (motor middle value)
+1. **Open hand** → hold for 5 seconds
+2. **O-pose** → hold for 5 seconds
 
 If `show_fist: true`, a third step appears:
 
-3. **Make fist** → hold for 5 seconds (motor value 0)
+3. **Make fist** → hold for 5 seconds
+
+For most existing models, open and fist follow the model-specific command table in `hand_config.yml`. For O20, open is motor `0` and fist is motor `255`.
 
 ### Difference between show_fist=true and show_fist=false
 
@@ -264,7 +278,7 @@ See the "Configuration" section in the main README for full config reference. Li
 | Config | Description | Options |
 |--------|-------------|---------|
 | `motion_type` | Data glove type | `linkerforce` (required) |
-| `robotname_r` | Right hand robot model | `o6`, `l7`, `l10`, `g20`, `r20`, `l25` |
+| `robotname_r` | Right hand robot model | `o6`, `l7`, `l10`, `g20`, `o20`, `o30`, `r20`, `l25` |
 | `robotname_l` | Left hand robot model | same as above |
 | `retargeting_type` | Retargeting type | `projection` |
 
@@ -391,6 +405,8 @@ motion/linkerforce/
 │   ├── l10_config.py    # L10 config
 │   ├── l20_config.py    # L20 config
 │   ├── g20_config.py    # G20 config
+│   ├── o20_config.py    # O20 config
+│   ├── o30_config.py    # O30 config
 │   └── o7_config.py     # O7 config
 ├── hand/                # Robot hand drivers
 │   ├── linkerforce_o6.py
@@ -398,7 +414,9 @@ motion/linkerforce/
 │   ├── linkerforce_l7.py
 │   ├── linkerforce_l10.py
 │   ├── linkerforce_l20.py
-│   └── linkerforce_g20.py
+│   ├── linkerforce_g20.py
+│   ├── linkerforce_o20.py
+│   └── linkerforce_o30.py
 ├── tmp/                 # Temp files (calibration data, etc.)
 ├── retarget.py          # ROS integration
 └── README.md           # English documentation

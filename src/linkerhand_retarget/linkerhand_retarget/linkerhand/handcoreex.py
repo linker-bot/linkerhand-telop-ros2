@@ -505,6 +505,11 @@ class DynamicWeightMultiStateLinearMapper(MultiStateLinearMapper):
         """
         self.debug_value[3] = source_current[1]
 
+        source_current_arr = np.array(source_current)
+        for state_name, glove_state in self.glove_states.items():
+            if np.allclose(source_current_arr, glove_state, rtol=0.0, atol=1e-9):
+                return self.robot_states[state_name].copy()
+
         glove_current = self.filters.update(source_current)
         # 应用Savitzky-Golay滤波
         # filtered_angles = self.filters.update(robot_angles)

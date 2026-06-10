@@ -87,7 +87,7 @@ def map_value(sensor_val, sensor_open, sensor_opose, sensor_fist, exp_factor):
         result = MOTOR_OPOSE + extension
         return max(MOTOR_FIST, result), normalized
 
-def test_joint(idx):
+def print_joint_curve(idx):
     name = JOINT_NAMES.get(idx, f'关节{idx}')
     exp_factor = EXP_FACTORS.get(idx, 5)
     
@@ -132,7 +132,7 @@ def main():
             print(f"映射曲线测试 - 关节 {idx}")
             print("=" * 80)
             print()
-            test_joint(idx)
+            print_joint_curve(idx)
         except ValueError:
             print(__doc__)
     else:
@@ -141,7 +141,7 @@ def main():
         print("=" * 80)
         print()
         for idx in [4, 8, 12, 16, 20]:
-            test_joint(idx)
+            print_joint_curve(idx)
     
     print("=" * 80)
     print("测试完成")
