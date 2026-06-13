@@ -123,6 +123,54 @@ class TestRobotNameMap:
                     assert lower_value == 0
                     assert upper_value == 255
 
+    def test_o20_hand_config_urdf_indices_match_current_urdf(self):
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        hand_config_path = package_dir / "config" / "hand_config.yml"
+        hand_config = yaml.safe_load(hand_config_path.read_text())
+
+        for side in ("right", "left"):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"o20_{side}"
+                / f"linkerhand_o20_{side}.urdf"
+            )
+            movable_joints = [
+                joint
+                for joint in ET.parse(urdf_path).getroot().findall("joint")
+                if joint.attrib.get("type") != "fixed"
+            ]
+            source_indices = hand_config[f"commandsourcedataindex_{side}_o20"]
+            urdf_indices = hand_config[f"urdfdataindex_{side}_o20"]
+
+            assert len(source_indices) == 20
+            assert len(urdf_indices) == 20
+            for source_idx, urdf_idx in zip(source_indices, urdf_indices):
+                source_idx = _optional_command(source_idx)
+                urdf_idx = _optional_command(urdf_idx)
+                if source_idx is None:
+                    assert urdf_idx is None
+                else:
+                    assert 0 <= urdf_idx < len(movable_joints)
+
+    def test_o20_handcore_keeps_latest_qpos_for_mujoco_display(self):
+        from linkerhand_retarget.linkerhand.config import HandConfig
+        from linkerhand_retarget.linkerhand.handcore import HandCore
+
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        robot_dir = package_dir / "assets" / "robots" / "hands"
+        handcore = HandCore(HandConfig(str(robot_dir), str(package_dir)))
+        qpos = [float(index) for index in range(25)]
+
+        handcore.trans_to_motor_right(qpos)
+        handcore.trans_to_motor_left(qpos)
+
+        assert handcore.last_qpos_r == qpos
+        assert handcore.last_qpos_l == qpos
+
     def test_o20_thumb_rotate_uses_o20_joint_range(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
             ROBOT_FIST_LEFT,
@@ -157,6 +205,36 @@ class TestRobotNameMap:
             assert lower <= opose[0] <= upper
             assert lower <= fist[0] <= upper
 
+    def test_o20_thumb_cmc_roll_open_and_fist_use_urdf_extremes(self):
+        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+            ROBOT_FIST_LEFT,
+            ROBOT_FIST_RIGHT,
+            ROBOT_ORIGINAL_LEFT,
+            ROBOT_ORIGINAL_RIGHT,
+        )
+
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+
+        for side, original, fist in (
+            ("right", ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_RIGHT),
+            ("left", ROBOT_ORIGINAL_LEFT, ROBOT_FIST_LEFT),
+        ):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"o20_{side}"
+                / f"linkerhand_o20_{side}.urdf"
+            )
+            roll_limit = ET.parse(urdf_path).getroot().find("./joint[@name='thumb_cmc_roll']").find("limit")
+            lower = float(roll_limit.attrib["lower"])
+            upper = float(roll_limit.attrib["upper"])
+
+            assert original[0] == pytest.approx(lower)
+            assert fist[0] == pytest.approx(upper)
+
     def test_o20_open_and_fist_pose_presets_match_motor_extremes(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
             ROBOT_FIST_LEFT,
@@ -186,12 +264,45 @@ class TestRobotNameMap:
                 if joint.attrib.get("type") != "fixed"
             ]
 
-            for robot_idx, urdf_idx in enumerate(O20_ROBOT_IDX_TO_URDF_IDX):
-                joint_limit = movable_joints[urdf_idx].find("limit")
+            for robot_idx, joint in enumerate(movable_joints):
+                joint_limit = joint.find("limit")
                 lower = float(joint_limit.attrib["lower"])
                 upper = float(joint_limit.attrib["upper"])
                 assert lower <= original[robot_idx] <= upper
                 assert lower <= fist[robot_idx] <= upper
+
+    def test_o20_fist_four_finger_pitch_and_dip_use_urdf_upper_limits(self):
+        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+            ROBOT_FIST_LEFT,
+            ROBOT_FIST_RIGHT,
+        )
+
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        four_finger_pitch_dip_indices = (5, 6, 8, 9, 11, 12, 14, 15)
+
+        for side, fist in (
+            ("right", ROBOT_FIST_RIGHT),
+            ("left", ROBOT_FIST_LEFT),
+        ):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"o20_{side}"
+                / f"linkerhand_o20_{side}.urdf"
+            )
+            movable_joints = [
+                joint
+                for joint in ET.parse(urdf_path).getroot().findall("joint")
+                if joint.attrib.get("type") != "fixed"
+            ]
+
+            for robot_idx in four_finger_pitch_dip_indices:
+                joint_limit = movable_joints[robot_idx].find("limit")
+                upper = float(joint_limit.attrib["upper"])
+                assert fist[robot_idx] == pytest.approx(upper)
 
     def test_o20_thumb_opose_motor_targets(self, monkeypatch):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
@@ -330,23 +441,74 @@ class TestRobotNameMap:
         hand.calibrationfistpose = fist_glove
         hand.initialize_mapper()
 
-        expected_targets = (
-            (open_glove, hand.robot_original),
-            (opose_glove, hand.robot_opose),
-            (fist_glove, hand.robot_fist),
-        )
-        for glove_state, expected_robot_state in expected_targets:
+        for glove_state, expected_robot_state in (
+            (open_glove, hand.effective_robot_original),
+            (fist_glove, hand.effective_robot_fist),
+        ):
             mapped = hand.multi_state_mapper.map_glove_to_robot(glove_state)
             assert list(mapped) == pytest.approx(expected_robot_state)
 
-    def test_o20_four_finger_roll_mapping_uses_negative_source_weight(self):
+        mapped_opose = hand.multi_state_mapper.map_glove_to_robot(opose_glove)
+        roll_indices = {4, 7, 10, 13}
+        for robot_idx, expected_value in enumerate(hand.effective_robot_opose):
+            if robot_idx in roll_indices:
+                continue
+            assert mapped_opose[robot_idx] == pytest.approx(expected_value)
+
+    def test_o20_four_finger_roll_mapping_uses_configured_source_direction(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
 
         for config_name in ("index_roll", "middle_roll", "ring_roll", "pinky_roll"):
-            assert FINGER_CONFIGS[config_name]["weights"]["v1"] == [-1]
-            assert FINGER_CONFIGS[config_name]["weights"]["v2"] == [-1]
+            assert FINGER_CONFIGS[config_name]["weights"]["v1"] == [1]
+            assert FINGER_CONFIGS[config_name]["weights"]["v2"] == [1]
             assert FINGER_CONFIGS[config_name]["reverse_motion"]["v1"] is False
             assert FINGER_CONFIGS[config_name]["reverse_motion"]["v2"] is False
+
+        assert "reverse_output_direction" not in FINGER_CONFIGS["index_roll"]
+        for config_name in ("middle_roll", "ring_roll", "pinky_roll"):
+            assert FINGER_CONFIGS[config_name]["reverse_output_direction"] is True
+
+    def test_o20_four_finger_roll_uses_open_fist_range(self):
+        from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
+
+        for config_name in ("index_roll", "middle_roll", "ring_roll", "pinky_roll"):
+            assert FINGER_CONFIGS[config_name]["state_order"] == ["original", "fist"]
+            assert FINGER_CONFIGS[config_name]["range_states"] == ["original", "fist"]
+
+    def test_o20_right_thumb_abduction_open_uses_urdf_upper_limit(self):
+        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+            ROBOT_FIST_RIGHT,
+            ROBOT_ORIGINAL_RIGHT,
+        )
+
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        urdf_path = (
+            package_dir
+            / "assets"
+            / "robots"
+            / "hands"
+            / "linker_hand"
+            / "o20_right"
+            / "linkerhand_o20_right.urdf"
+        )
+        yaw_limit = ET.parse(urdf_path).getroot().find("./joint[@name='thumb_cmc_yaw']").find("limit")
+        lower = float(yaw_limit.attrib["lower"])
+        upper = float(yaw_limit.attrib["upper"])
+
+        assert ROBOT_ORIGINAL_RIGHT[1] == pytest.approx(upper)
+        assert ROBOT_FIST_RIGHT[1] == pytest.approx(max(0.0, lower))
+
+    def test_o20_mujoco_thumb_abduction_display_uses_source_direction(self, monkeypatch):
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        monkeypatch.syspath_prepend(str(package_dir))
+
+        from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o20 import (
+            O20_MUJOCO_JOINT_ARC_INDICES,
+            O20_MUJOCO_JOINT_ARC_SIGNS,
+        )
+
+        assert O20_MUJOCO_JOINT_ARC_INDICES[1] == 1
+        assert O20_MUJOCO_JOINT_ARC_SIGNS[1] == 1.0
 
 
 class TestOperatorToMano:

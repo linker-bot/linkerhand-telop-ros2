@@ -255,10 +255,12 @@ class Retarget():
         # ========== 调试：映射层跳变检测 ==========
         self.debug_enabled = True  # 设为 False 关闭调试
         self.debug_motor_jump_threshold = 20  # 电机值跳变阈值
+        self.debug_raw_jump_threshold = 0.35  # 手套原始弧度跳变阈值
         self.debug_last_motor_l = [255] * 6
         self.debug_last_motor_r = [255] * 6
         self.debug_last_raw_l = [0.0] * 21
         self.debug_last_raw_r = [0.0] * 21
+        self.debug_last_o6_pinky_raw_r = None
 
 
 
@@ -295,6 +297,86 @@ class Retarget():
             except Exception as e:
                 self.node.get_logger().error("Error processing touch data: %s" % str(e))
                 return None
+
+    def _capture_o6_right_pinky_raw_jump(self, right_positions, left_valid=False, right_valid=True):
+        if not getattr(self, "debug_enabled", False) or getattr(self.righthandtype, "name", self.righthandtype) != "o6":
+            return None
+        if not right_valid or right_positions is None or len(right_positions) <= 20:
+            return None
+
+        def fmt(values):
+            return "[" + ", ".join(f"{value:.6f}" for value in values) + "]"
+
+        indices = [18, 19, 20]
+        current = [float(right_positions[index]) for index in indices]
+        previous = self.debug_last_o6_pinky_raw_r
+        self.debug_last_o6_pinky_raw_r = current
+
+        if previous is None:
+            deltas = [0.0] * len(current)
+        else:
+            deltas = [current_value - previous_value for current_value, previous_value in zip(current, previous)]
+        max_local_index = max(range(len(deltas)), key=lambda index: abs(deltas[index]))
+        max_delta = deltas[max_local_index]
+        threshold = getattr(self, "debug_raw_jump_threshold", 0.35)
+        is_jump = previous is not None and abs(max_delta) >= threshold
+
+        glove_version = getattr(getattr(self, "righthand", None), "glove_version", None)
+        trace = {
+            "raw_indices": indices,
+            "raw_previous": previous,
+            "raw_current": current,
+            "raw_delta": deltas,
+            "max_index": indices[max_local_index],
+            "max_delta": max_delta,
+            "is_jump": is_jump,
+            "threshold": threshold,
+            "left_valid": left_valid,
+            "right_valid": right_valid,
+            "glove_version": glove_version,
+        }
+        self.node.get_logger().warn(
+            "[O6右手小指根部原始数据跟踪] "
+            f"is_jump={is_jump}, "
+            f"raw_idx={indices}, "
+            f"raw_prev={fmt(previous) if previous is not None else 'None'}, "
+            f"raw_curr={fmt(current)}, "
+            f"raw_delta={fmt(deltas)}, "
+            f"max_idx={indices[max_local_index]}, "
+            f"max_delta={max_delta:.6f}, "
+            f"threshold={threshold}, "
+            f"left_valid={left_valid}, right_valid={right_valid}, "
+            f"glove_version={glove_version}"
+        )
+        return trace
+
+    def _trace_o6_right_publish_before_topic(self, raw_jump_trace, msg_r):
+        if not raw_jump_trace:
+            return
+
+        def fmt(values):
+            return "[" + ", ".join(f"{float(value):.6f}" for value in values) + "]"
+
+        position = list(getattr(msg_r, "position", []))
+        velocity = list(getattr(msg_r, "velocity", []))
+        pinky_motor = position[5] if len(position) > 5 else None
+        pinky_velocity = velocity[5] if len(velocity) > 5 else None
+        pinky_motor_text = "None" if pinky_motor is None else f"{float(pinky_motor):.6f}"
+        pinky_velocity_text = "None" if pinky_velocity is None else f"{float(pinky_velocity):.6f}"
+
+        self.node.get_logger().warn(
+            "[O6右手小指根部发布前跟踪] "
+            f"pub_count={getattr(self, 'pubprintcount', None)}, "
+            f"is_jump={raw_jump_trace.get('is_jump')}, "
+            f"raw_idx={raw_jump_trace['raw_indices']}, "
+            f"raw_delta={fmt(raw_jump_trace['raw_delta'])}, "
+            f"max_idx={raw_jump_trace['max_index']}, "
+            f"max_delta={raw_jump_trace['max_delta']:.6f}, "
+            f"publish_position={fmt(position)}, "
+            f"publish_velocity={fmt(velocity)}, "
+            f"pinky_motor={pinky_motor_text}, "
+            f"pinky_velocity={pinky_velocity_text}"
+        )
 
     def linkerforce_init(self):
         # 从配置读取串口参数
@@ -457,6 +539,8 @@ class Retarget():
                     logger=serial_logger
                 )
                 if self.force_reader_left.openserial(port=port, baudrate=baudrate):
+                    self.force_reader_left.handtype = handtype
+                    self.force_reader_left.version = version
                     self.force_reader_left.start()
                     self.force_reader_left.serial_port.write(self.force_reader_left.pack_01_data())
                     self.leftport = port
@@ -476,6 +560,8 @@ class Retarget():
                     logger=serial_logger
                 )
                 if self.force_reader_right.openserial(port=port, baudrate=baudrate):
+                    self.force_reader_right.handtype = handtype
+                    self.force_reader_right.version = version
                     self.force_reader_right.start()
                     self.force_reader_right.serial_port.write(self.force_reader_right.pack_01_data())
                     self.rightport = port
@@ -671,6 +757,11 @@ class Retarget():
             else:
                 right_positions = copy.deepcopy(self.force_reader_right.poslist)
 
+            o6_pinky_raw_jump_trace = self._capture_o6_right_pinky_raw_jump(
+                right_positions,
+                left_valid=left_valid,
+                right_valid=right_valid,
+            )
             self.righthand.joint_update(right_positions)
             self.righthand.speed_update()
             if right_valid:
@@ -692,6 +783,7 @@ class Retarget():
             msg_r.name = [f'joint{i + 1}' for i in range(len(self.righthand.g_jointpositions))]
             msg_r.position = [float(num) for num in self.righthand.g_jointpositions]
             msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
+            self._trace_o6_right_publish_before_topic(o6_pinky_raw_jump_trace, msg_r)
             self.publisher_r.publish(msg_r)
 
             if self.isdebugpub:

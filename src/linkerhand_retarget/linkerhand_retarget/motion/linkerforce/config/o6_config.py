@@ -14,7 +14,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.2,
-            'extended_exp_factor': 10
+            'extended_exp_factor': 5
         }
     },
     'thumb_root_flexion': {
@@ -22,7 +22,7 @@ FINGER_CONFIGS = {
         'joints': [2, 3, 4],
         'weights': {
             'v1': [0, 0, 1],
-            'v2': [0.2, 0, 0.8]
+            'v2': [0, 0, 1]
         },
         'robot_idx': 1,
         'type': 'thumb',
@@ -34,7 +34,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
-            'extended_exp_factor': 10
+            'extended_exp_factor': 5
         }
     },
     'index_root_flexion': {
@@ -54,7 +54,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
-            'extended_exp_factor': 10
+            'extended_exp_factor': 5
         }
     },
     'middle_root_flexion': {
@@ -127,13 +127,13 @@ MAPPING_ORDER = [
 MULTI_SEGMENT_CONFIG = {
     'states': [
         'original', 
-        # 'opose',
-        'fist'
+        'opose',
+        # 'fist'
         ],
     'state_names': {
         'original': '张手',
-        # 'opose': 'O手势',
-        'fist': '握拳'
+        'opose': 'O手势',
+        # 'fist': '握拳'
     }
 }
 MULTI_SEGMENT_CONFIG_FROZEN = tuple(MULTI_SEGMENT_CONFIG['states'])

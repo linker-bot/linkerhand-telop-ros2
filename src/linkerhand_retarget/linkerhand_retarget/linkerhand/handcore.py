@@ -62,6 +62,8 @@ class HandCore():
         self.lock = threading.Lock()  # 线程锁
         self.right_joint_angles = []  # 存储关节角度等数据
         self.left_joint_angles = []   # 存储关节角度等数据
+        self.last_qpos_r = None
+        self.last_qpos_l = None
 
     @staticmethod
     def get_joint_limits(robot):
@@ -234,6 +236,7 @@ class HandCore():
         return qpos
 
     def trans_to_motor_left(self, temp_l):
+        self.last_qpos_l = list(temp_l)
         jointpositions_l = [255.0] * self.hand_numjoints_l
         for i in range(self.hand_numjoints_l):
             if self.sourcedataindex_l[i] is not None:
@@ -249,6 +252,7 @@ class HandCore():
         return jointpositions_l
 
     def trans_to_motor_right(self, temp_r):
+        self.last_qpos_r = list(temp_r)
         jointpositions_r = [255.0] * self.hand_numjoints_r
         for i in range(self.hand_numjoints_r):
             if self.sourcedataindex_r[i] is not None:

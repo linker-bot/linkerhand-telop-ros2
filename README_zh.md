@@ -135,6 +135,16 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `port` | 手套 UDP 端口 | `8888` |
 | `serverport` | 本机监听端口 | `5551` |
 
+### `mujoco` - 可选显示模块
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `enabled` | SDK 启动时是否拉起 MuJoCo viewer | `false` |
+| `hands` | 要启动的手部 viewer。`auto` 优先跟随当前 motion 模块实际加载到的手套；也可手动设置 `[right]`、`[left]` 或 `[right, left]`。 | `auto` |
+| `fps` | 显示模块预留刷新率配置 | `30` |
+
+显示模块复用 SDK 现有机器人映射，根据 `robotname_r` 和 `robotname_l` 自动加载对应 URDF。使用 `hands: auto` 时，会在 motion 模块初始化完成后，根据实际加载到的手套自动启动一个或两个 MuJoCo viewer 实例。MuJoCo 是可选 Python 依赖；缺少 `mujoco`、`mujoco.viewer` 或某只手对应 URDF 时，会针对该实例输出 warning，并继续运行 SDK 主流程。
+
 ### `calibration` - LinkerFFG
 
 | 配置项 | 说明 | 默认值 |

@@ -17,6 +17,8 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
+        'reverse_output_direction': True,
+        'range_states': ['original', 'fist'],
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
@@ -38,6 +40,8 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
+        'reverse_output_direction': True,
+        'range_states': ['original', 'fist'],
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
@@ -106,8 +110,8 @@ FINGER_CONFIGS = {
         'name': '食指',
         'joints': [5],
         'weights': {
-            'v1': [-1],
-            'v2': [-1]
+            'v1': [1],
+            'v2': [1]
         },
         'robot_idx': 4,
         'type': 'finger',
@@ -116,6 +120,8 @@ FINGER_CONFIGS = {
             'v2': False
         },
         'dynamic_weight': None,
+        'state_order': ['original', 'fist'],
+        'range_states': ['original', 'fist'],
         'extended_mapping': {
             'enabled': False,
             'scale_factor': 1.0,
@@ -168,8 +174,8 @@ FINGER_CONFIGS = {
         'name': '中指',
         'joints': [9],
         'weights': {
-            'v1': [-1],
-            'v2': [-1]
+            'v1': [1],
+            'v2': [1]
         },
         'robot_idx': 7,
         'type': 'finger',
@@ -177,7 +183,10 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
+        'reverse_output_direction': True,
         'dynamic_weight': None,
+        'state_order': ['original', 'fist'],
+        'range_states': ['original', 'fist'],
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
@@ -231,8 +240,8 @@ FINGER_CONFIGS = {
         'name': '无名指',
         'joints': [13],
         'weights': {
-            'v1': [-1],
-            'v2': [-1]
+            'v1': [1],
+            'v2': [1]
         },
         'robot_idx': 10,
         'type': 'finger',
@@ -240,7 +249,10 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
+        'reverse_output_direction': True,
         'dynamic_weight': None,
+        'state_order': ['original', 'fist'],
+        'range_states': ['original', 'fist'],
         'extended_mapping': {
             'enabled': False,
             'scale_factor': 1.0,
@@ -293,8 +305,8 @@ FINGER_CONFIGS = {
         'name': '小指',
         'joints': [17],
         'weights': {
-            'v1': [-1],
-            'v2': [-1]
+            'v1': [1],
+            'v2': [1]
         },
         'robot_idx': 13,
         'type': 'finger',
@@ -302,7 +314,10 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
+        'reverse_output_direction': True,
         'dynamic_weight': None,
+        'state_order': ['original', 'fist'],
+        'range_states': ['original', 'fist'],
         'extended_mapping': {
             'enabled': False,
             'scale_factor': 1.0,
@@ -377,51 +392,51 @@ MULTI_SEGMENT_CONFIG = {
 MULTI_SEGMENT_CONFIG_FROZEN = tuple(MULTI_SEGMENT_CONFIG['states'])
 
 ROBOT_ORIGINAL_LEFT = [
-    0.0, 0.0, 0.0, 0.0,
-    0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0
+   -0.5236, -1.57, 0.0, 0.0,
+    0.3543, 0.0, 0.0,
+   -0.267, 0.0, 0.0,
+   -0.192, 0.0, 0.0,
+   -0.2182, 0.0, 0.0
 ]
 
 ROBOT_ORIGINAL_RIGHT = [
-    0.0, 0.0, 0.0, 0.0,
-   -0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0,
-   -0.23, 0.0, 0.0
+   -0.52, 1.57, 0.0, 0.0,
+   -0.35, 0.0, 0.0,
+   -0.26, 0.0, 0.0,
+   -0.20, 0.0, 0.0,
+   -0.21, 0.0, 0.0
 ]
 
 ROBOT_OPOSE_LEFT = [
-   -0.153, -0.561, 0.610, 1.121,
-    0.131,  0.291, 1.417,
-   -0.002,  0.291, 1.417,
-   -0.117,  0.291, 1.417,
-   -0.210,  0.291, 1.417
+   -0.153, -0.561, 0.325, 1.199,
+    0.131,  0.761, 0.929,
+   -0.002,  0.761, 0.929,
+   -0.117,  0.761, 0.929,
+   -0.210,  0.761, 0.929,
 ]
 
 ROBOT_OPOSE_RIGHT = [
-    0.153, 0.561, 0.610, 1.121,
-   -0.131, 0.291, 1.417,
-   -0.002, 0.291, 1.417,
-   -0.117, 0.291, 1.417,
-   -0.210, 0.291, 1.417
+    0.153, 0.561, 0.325, 1.199,
+   -0.131, 0.761, 0.929,
+   -0.002, 0.761, 0.929,
+   -0.117, 0.761, 0.929,
+   -0.210, 0.761, 0.929
 ]
 
 ROBOT_FIST_RIGHT = [
-    1.39,  1.57,  0.83,  1.25,
-    0.23,  1.22,  1.75,
-    0.23,  1.22,  1.75,
-    0.23,  1.22,  1.75,
-    0.23,  1.22,  1.75
+    0.52,  0.0,  0.83,  1.25,
+    0.09,  1.85,  1.85,
+    0.26,  1.85,  1.85,
+    0.20,  1.85,  1.85,
+    0.09,  1.85,  1.85
 ]
 
 ROBOT_FIST_LEFT = [
-   -1.4,  -1.57,  0.84,  1.26,
-   -0.23,  1.22,  1.74,
-    0.23,  1.22,  1.74,
-    0.23,  1.22,  1.74,
-    0.23,  1.22,  1.74
+    0.5236,  0,  0.84,  1.26,
+   -0.08726,  1.9548,  1.9897,
+    0.267,  1.9548,  1.9897,
+    0.2112,  1.9548,  1.9897,
+    0.08726,  1.9548,  1.9897
 ]
 
 # 电机输出约束配置 (20电机)

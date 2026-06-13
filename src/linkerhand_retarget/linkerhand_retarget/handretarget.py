@@ -48,6 +48,12 @@ from linkerhand.vtrdyncore import *
 from linkerhand.handcore import HandCore
 from linkerhand.config import HandConfig
 from linkerhand.constants import RetargetingType, DataSource, MotionSource, RobotName
+from linkerhand_retarget.mujoco_display import (
+    MujocoDisplay,
+    build_mujoco_display_plans,
+    detect_loaded_hands,
+    extract_mujoco_joint_positions,
+)
 
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
@@ -133,6 +139,8 @@ class HandRetargetNode(Node):
         
         self.calibrationopen_r, self.calibrationopen_l, self.calibrationclose_r, self.calibrationclose_l = None, None, None, None
         self.retarget = None
+        self.mujoco_displays = []
+        self.mujoco_timer = None
         self.datasource_type = DataSource[self.baseconfig["system"]["datasource_type"]]
         self.retargeting_type = RetargetingType[self.baseconfig["system"]["retargeting_type"]]
         self.motion_type = MotionSource[self.baseconfig["system"]["motion_type"]]
@@ -193,6 +201,90 @@ class HandRetargetNode(Node):
 
         # 当前模式
         self.current_mode = 'glove'
+
+    def _start_mujoco_display_if_enabled(self):
+        loaded_hands = detect_loaded_hands(self.retarget)
+        left_reader = getattr(self.retarget, "force_reader_left", None)
+        right_reader = getattr(self.retarget, "force_reader_right", None)
+        plans = build_mujoco_display_plans(
+            self.baseconfig,
+            package_dir=self.base_config,
+            robot_name_r=self.robot_name_r,
+            robot_name_l=self.robot_name_l,
+            loaded_hands=loaded_hands,
+            urdf_paths={
+                "right": self.handcore.righturdfpath,
+                "left": self.handcore.lefturdfpath,
+            },
+        )
+
+        if not any(plan.enabled for plan in plans):
+            self.get_logger().info("MuJoCo display disabled")
+            return
+
+        self.get_logger().info(
+            "MuJoCo display auto detection: "
+            f"left_handtype={getattr(left_reader, 'handtype', None)}, "
+            f"right_handtype={getattr(right_reader, 'handtype', None)}, "
+            f"loaded_hands={loaded_hands}, "
+            f"plans={[(plan.hand, str(plan.model_path)) for plan in plans]}"
+        )
+
+        for plan in plans:
+            for warning in plan.warnings:
+                self.get_logger().warn(warning)
+
+            if not plan.should_start:
+                self.get_logger().warn(
+                    f"MuJoCo display for {plan.hand} hand will not start; SDK startup continues."
+                )
+                continue
+
+            try:
+                display = MujocoDisplay(
+                    plan.model_path,
+                    fps=plan.fps,
+                    hand=plan.hand,
+                    model_scale=plan.model_scale,
+                    model_rotate_rpy=plan.model_rotate_rpy,
+                    model_translate_xyz=plan.model_translate_xyz,
+                ).start()
+                self.mujoco_displays.append(display)
+                self.get_logger().info(
+                    "MuJoCo display started for "
+                    f"{plan.hand} hand: {plan.model_path}, "
+                    f"scale={plan.model_scale}, rotate_rpy={plan.model_rotate_rpy}, "
+                    f"translate_xyz={plan.model_translate_xyz}"
+                )
+            except Exception as exc:
+                self.get_logger().warn(
+                    "MuJoCo display failed to start; SDK startup continues. "
+                    f"hand={plan.hand}, model={plan.model_path}, error={exc}"
+                )
+
+        if self.mujoco_displays and self.mujoco_timer is None:
+            fps = max(display.fps for display in self.mujoco_displays)
+            self.mujoco_timer = self.create_timer(1.0 / fps, self._sync_mujoco_displays)
+
+    def _sync_mujoco_displays(self):
+        for display in self.mujoco_displays:
+            try:
+                joint_positions = extract_mujoco_joint_positions(
+                    self.handcore,
+                    hand=display.hand,
+                    movable_joint_names=display.movable_joint_names,
+                    hand_model=(
+                        self.retarget.lefthand
+                        if display.hand == "left"
+                        else self.retarget.righthand
+                    ),
+                )
+                if joint_positions:
+                    display.update_joint_positions(joint_positions)
+            except Exception as exc:
+                self.get_logger().warn(
+                    f"MuJoCo display update failed; hand={display.hand}, error={exc}"
+                )
 
     def teleop_param_callback(self, msg):
         """处理遥操作参数话题回调"""
@@ -325,6 +417,7 @@ class HandRetargetNode(Node):
         else:
             print("启动应用实例")
             self.retarget.process()
+            self._start_mujoco_display_if_enabled()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -346,6 +439,12 @@ def main(args=None):
             # 停止串口线程
             if hasattr(node, 'retarget') and node.retarget and hasattr(node.retarget, 'stop_serial_threads'):
                 node.retarget.stop_serial_threads()
+            if hasattr(node, 'mujoco_displays'):
+                for display in node.mujoco_displays:
+                    try:
+                        display.close()
+                    except Exception as exc:
+                        node.get_logger().warn(f"关闭 MuJoCo display 失败: {exc}")
             node.destroy_node()
         rclpy.shutdown()
 

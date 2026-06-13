@@ -32,8 +32,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.3,
-            'extended_exp_factor': 10
+            'scale_factor': 1,
+            'extended_exp_factor': 0.3
         }
     },
     'thumb_root_flexion': {
@@ -41,7 +41,7 @@ FINGER_CONFIGS = {
         'joints': [2, 3, 4],
         'weights': {
             'v1': [0.2, 0, 0.8],
-            'v2': [0.6, 0, 0.4]
+            'v2': [1, 0, 0]
         },
         'robot_idx': 2,
         'type': 'thumb',
@@ -52,8 +52,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
-            'extended_exp_factor': 2
+            'scale_factor': 5,
+            'extended_exp_factor': 20
         }
     },
     'index_roll': {
@@ -251,7 +251,7 @@ ROBOT_ORIGINAL_RIGHT = [
 ]
 
 ROBOT_FIST_LEFT = [
-    1.1339, 1.9189, 0.5146, 0.7152, 0.7763,
+    1.1339, 1.9189, 0.5146, 0, 0,
     0, 1.3607, 1.8317, 1.8317,
        1.3607, 1.8317, 0.628,
     0, 1.3607, 1.8317, 0.628,
@@ -259,7 +259,7 @@ ROBOT_FIST_LEFT = [
 ]
 
 ROBOT_FIST_RIGHT = [
-    1.1339, 1.9189, 0.5146, 0.7152, 0.7763,
+    1.1339, 1.9189, 0.5146, 0, 0,
     0, 1.3607, 1.8317, 1.8317,
        1.3607, 1.8317, 0.628,
     0, 1.3607, 1.8317, 0.628,

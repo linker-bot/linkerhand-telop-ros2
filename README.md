@@ -135,6 +135,16 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `port` | Glove UDP port | `8888` |
 | `serverport` | Local listening port | `5551` |
 
+### `mujoco` - Optional Display
+
+| Config | Description | Default |
+|--------|-------------|---------|
+| `enabled` | Start the MuJoCo viewer during SDK startup | `false` |
+| `hands` | Hand viewers to start. `auto` follows the hands loaded by the selected motion module when available; set `[right]`, `[left]`, or `[right, left]` to override. | `auto` |
+| `fps` | Viewer update rate setting reserved for display integration | `30` |
+
+The display uses the same robot mapping as the SDK and loads URDF paths from the selected `robotname_r` and `robotname_l`. With `hands: auto`, the SDK starts one or two MuJoCo viewer instances after the motion module initializes and reports the loaded hands. MuJoCo is an optional Python dependency; if `mujoco`, `mujoco.viewer`, or a mapped URDF file is unavailable, startup prints a warning for that hand and the SDK continues.
+
 ### `calibration` - LinkerFFG
 
 | Config | Description | Default |

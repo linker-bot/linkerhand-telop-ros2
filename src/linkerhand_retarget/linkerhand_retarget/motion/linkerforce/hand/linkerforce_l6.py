@@ -10,6 +10,9 @@ from ..config.l6_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT,
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
 
+L6_MUJOCO_JOINT_ARC_INDICES = (1, 0, 0, 2, 2, 3, 3, 4, 4, 5, 5)
+L6_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(L6_MUJOCO_JOINT_ARC_INDICES)
+
 
 def _resolve_version_config(configs: dict, version: str) -> dict:
     """
@@ -32,6 +35,8 @@ class RightHand:
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
+        self.mujoco_joint_arc_indices = L6_MUJOCO_JOINT_ARC_INDICES
+        self.mujoco_joint_arc_signs = L6_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None
@@ -269,6 +274,8 @@ class LeftHand:
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
+        self.mujoco_joint_arc_indices = L6_MUJOCO_JOINT_ARC_INDICES
+        self.mujoco_joint_arc_signs = L6_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None
