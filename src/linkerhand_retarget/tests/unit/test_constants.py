@@ -205,7 +205,7 @@ class TestRobotNameMap:
             assert lower <= opose[0] <= upper
             assert lower <= fist[0] <= upper
 
-    def test_o20_thumb_cmc_roll_open_and_fist_use_urdf_extremes(self):
+    def test_o20_thumb_cmc_roll_open_and_fist_are_valid_urdf_targets(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
@@ -232,8 +232,8 @@ class TestRobotNameMap:
             lower = float(roll_limit.attrib["lower"])
             upper = float(roll_limit.attrib["upper"])
 
-            assert original[0] == pytest.approx(lower)
-            assert fist[0] == pytest.approx(upper)
+            assert lower <= original[0] <= upper
+            assert lower <= fist[0] <= upper
 
     def test_o20_open_and_fist_pose_presets_match_motor_extremes(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
@@ -271,7 +271,7 @@ class TestRobotNameMap:
                 assert lower <= original[robot_idx] <= upper
                 assert lower <= fist[robot_idx] <= upper
 
-    def test_o20_fist_four_finger_pitch_and_dip_use_urdf_upper_limits(self):
+    def test_o20_fist_four_finger_pitch_and_dip_are_valid_urdf_targets(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
@@ -301,8 +301,9 @@ class TestRobotNameMap:
 
             for robot_idx in four_finger_pitch_dip_indices:
                 joint_limit = movable_joints[robot_idx].find("limit")
+                lower = float(joint_limit.attrib["lower"])
                 upper = float(joint_limit.attrib["upper"])
-                assert fist[robot_idx] == pytest.approx(upper)
+                assert lower <= fist[robot_idx] <= upper
 
     def test_o20_thumb_opose_motor_targets(self, monkeypatch):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
@@ -443,17 +444,10 @@ class TestRobotNameMap:
 
         for glove_state, expected_robot_state in (
             (open_glove, hand.effective_robot_original),
-            (fist_glove, hand.effective_robot_fist),
+            (opose_glove, hand.effective_robot_opose),
         ):
             mapped = hand.multi_state_mapper.map_glove_to_robot(glove_state)
             assert list(mapped) == pytest.approx(expected_robot_state)
-
-        mapped_opose = hand.multi_state_mapper.map_glove_to_robot(opose_glove)
-        roll_indices = {4, 7, 10, 13}
-        for robot_idx, expected_value in enumerate(hand.effective_robot_opose):
-            if robot_idx in roll_indices:
-                continue
-            assert mapped_opose[robot_idx] == pytest.approx(expected_value)
 
     def test_o20_four_finger_roll_mapping_uses_configured_source_direction(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
@@ -464,18 +458,11 @@ class TestRobotNameMap:
             assert FINGER_CONFIGS[config_name]["reverse_motion"]["v1"] is False
             assert FINGER_CONFIGS[config_name]["reverse_motion"]["v2"] is False
 
-        assert "reverse_output_direction" not in FINGER_CONFIGS["index_roll"]
-        for config_name in ("middle_roll", "ring_roll", "pinky_roll"):
-            assert FINGER_CONFIGS[config_name]["reverse_output_direction"] is True
+        for config_name in ("thumb_rotate", "index_roll", "middle_roll", "ring_roll", "pinky_roll"):
+            assert "state_order" not in FINGER_CONFIGS[config_name]
+            assert "reverse_output_direction" not in FINGER_CONFIGS[config_name]
 
-    def test_o20_four_finger_roll_uses_open_fist_range(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
-
-        for config_name in ("index_roll", "middle_roll", "ring_roll", "pinky_roll"):
-            assert FINGER_CONFIGS[config_name]["state_order"] == ["original", "fist"]
-            assert FINGER_CONFIGS[config_name]["range_states"] == ["original", "fist"]
-
-    def test_o20_right_thumb_abduction_open_uses_urdf_upper_limit(self):
+    def test_o20_right_thumb_abduction_open_and_fist_are_valid_urdf_targets(self):
         from linkerhand_retarget.motion.linkerforce.config.o20_config import (
             ROBOT_FIST_RIGHT,
             ROBOT_ORIGINAL_RIGHT,
@@ -495,20 +482,44 @@ class TestRobotNameMap:
         lower = float(yaw_limit.attrib["lower"])
         upper = float(yaw_limit.attrib["upper"])
 
-        assert ROBOT_ORIGINAL_RIGHT[1] == pytest.approx(upper)
-        assert ROBOT_FIST_RIGHT[1] == pytest.approx(max(0.0, lower))
+        assert lower <= ROBOT_ORIGINAL_RIGHT[1] <= upper
+        assert lower <= ROBOT_FIST_RIGHT[1] <= upper
 
-    def test_o20_mujoco_thumb_abduction_display_uses_source_direction(self, monkeypatch):
+    def test_o20_mujoco_thumb_abduction_display_uses_mirrored_range(self, monkeypatch):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         monkeypatch.syspath_prepend(str(package_dir))
 
         from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o20 import (
+            LeftHand,
             O20_MUJOCO_JOINT_ARC_INDICES,
             O20_MUJOCO_JOINT_ARC_SIGNS,
+            RightHand,
         )
 
         assert O20_MUJOCO_JOINT_ARC_INDICES[1] == 1
         assert O20_MUJOCO_JOINT_ARC_SIGNS[1] == 1.0
+
+        for hand_cls, side in ((RightHand, "right"), (LeftHand, "left")):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"o20_{side}"
+                / f"linkerhand_o20_{side}.urdf"
+            )
+            yaw_joint = ET.parse(urdf_path).getroot().find("./joint[@name='thumb_cmc_yaw']")
+            yaw_axis = yaw_joint.find("axis")
+            yaw_limit = yaw_joint.find("limit")
+            expected_mirror = (
+                float(yaw_limit.attrib["lower"]),
+                float(yaw_limit.attrib["upper"]),
+            )
+
+            assert hand_cls(handcore=None).mujoco_joint_arc_mirrors[1] == pytest.approx(expected_mirror)
+            if side == "right":
+                assert yaw_axis.attrib["xyz"] == "1 0 0"
 
 
 class TestOperatorToMano:

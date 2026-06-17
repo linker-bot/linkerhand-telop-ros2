@@ -5,8 +5,10 @@ v2.8.0升级了映射器算法
 """
 import numpy as np
 import copy
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from linkerhand.handcore import HandCore
-from ..config.o20_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS
+from ..config.o20_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG, MOTOR_CONSTRAINTS
 from .simple_linear_mapper import SimpleLinearMapper
 
 O20_THUMB_MOTOR_CALIBRATION = {
@@ -32,6 +34,34 @@ O20_MUJOCO_JOINT_ARC_SIGNS = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
                               1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
 
 
+def _load_o20_urdf_joint_limits(hand: str):
+    package_dir = Path(__file__).resolve().parents[3]
+    urdf_path = (
+        package_dir
+        / "assets"
+        / "robots"
+        / "hands"
+        / "linker_hand"
+        / f"o20_{hand}"
+        / f"linkerhand_o20_{hand}.urdf"
+    )
+    root = ET.parse(urdf_path).getroot()
+    limits = []
+    for joint in root.findall("joint"):
+        if joint.attrib.get("type") == "fixed":
+            continue
+        limit = joint.find("limit")
+        if limit is None:
+            limits.append((float("-inf"), float("inf")))
+            continue
+        limits.append((float(limit.attrib["lower"]), float(limit.attrib["upper"])))
+    return tuple(limits)
+
+
+O20_URDF_JOINT_LIMITS_RIGHT = _load_o20_urdf_joint_limits("right")
+O20_URDF_JOINT_LIMITS_LEFT = _load_o20_urdf_joint_limits("left")
+
+
 def _piecewise_motor_value(value, lower, opose, upper, motor_lower, motor_opose, motor_upper):
     return _map_piecewise_linear(
         value,
@@ -50,6 +80,57 @@ def _clamp(value, lower, upper):
 
 def _clamp_to_range(value, endpoint_a, endpoint_b):
     return _clamp(value, min(endpoint_a, endpoint_b), max(endpoint_a, endpoint_b))
+
+
+def _reverse_between(value, source_open, source_fist, target_open, target_fist):
+    if abs(source_fist - source_open) < 1e-9:
+        return target_fist
+    ratio = (value - source_open) / (source_fist - source_open)
+    ratio = _clamp(ratio, 0.0, 1.0)
+    return target_open + ratio * (target_fist - target_open)
+
+
+def _resolve_o20_urdf_joint_limits(handcore: HandCore, hand: str):
+    lower_attr = "hand_lower_limits_l" if hand == "left" else "hand_lower_limits_r"
+    upper_attr = "hand_upper_limits_l" if hand == "left" else "hand_upper_limits_r"
+    lower_limits = getattr(handcore, lower_attr, None) if handcore is not None else None
+    upper_limits = getattr(handcore, upper_attr, None) if handcore is not None else None
+    if lower_limits is not None and upper_limits is not None:
+        limits = tuple(zip(lower_limits, upper_limits))
+        if len(limits) >= len(O20_MUJOCO_JOINT_ARC_INDICES):
+            return limits
+    return O20_URDF_JOINT_LIMITS_LEFT if hand == "left" else O20_URDF_JOINT_LIMITS_RIGHT
+
+
+def _build_o20_mujoco_joint_arc_mirrors(joint_limits):
+    mirrors = [None] * len(O20_MUJOCO_JOINT_ARC_INDICES)
+    if len(joint_limits) > 1:
+        mirrors[1] = tuple(joint_limits[1])
+    return tuple(mirrors)
+
+
+def _build_o20_mujoco_joint_arc_remaps(
+        joint_limits,
+        robot_original,
+        robot_opose,
+        robot_fist):
+    remaps = [None] * len(O20_MUJOCO_JOINT_ARC_INDICES)
+    if len(joint_limits) > 0:
+        remaps[0] = (
+            (robot_original[0], robot_original[0]),
+            (robot_opose[0], robot_opose[0]),
+            (robot_fist[0], robot_fist[0]),
+        )
+    return tuple(remaps)
+
+
+def _clamp_robot_arc_values(values, joint_limits):
+    clipped = np.array(values, dtype=float).copy()
+    for robot_idx, (lower, upper) in enumerate(joint_limits):
+        if robot_idx >= len(clipped):
+            break
+        clipped[robot_idx] = _clamp(float(clipped[robot_idx]), float(lower), float(upper))
+    return clipped
 
 
 def _map_piecewise_linear(value, source_open, source_opose, source_fist,
@@ -174,6 +255,15 @@ def _map_o20_qpos_to_motor(handcore: HandCore, qpos, hand: str,
 
     return jointpositions
 
+
+def _matches_calibration_pose(joint_arc, calibration_pose) -> bool:
+    if calibration_pose is None:
+        return False
+    if len(joint_arc) != len(calibration_pose):
+        return False
+    return bool(np.allclose(joint_arc, calibration_pose, rtol=0.0, atol=1e-9))
+
+
 class RightHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
@@ -186,6 +276,7 @@ class RightHand:
         self.mujoco_joint_arc_signs = O20_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
+        self._debug_roll_counter = 0
         self.calibrationoriginal = None    # 五指张开标定值 (对应0)
         self.calibrationfistpose = None    # 握拳标定值 (对应255)
         self.calibrationopose = None       # O型标定值 (对应中间值)
@@ -206,6 +297,14 @@ class RightHand:
         self.robot_original = ROBOT_ORIGINAL_RIGHT
         self.robot_opose = ROBOT_OPOSE_RIGHT
         self.robot_fist = ROBOT_FIST_RIGHT
+        self.urdf_joint_limits = _resolve_o20_urdf_joint_limits(self.handcore, "right")
+        self.mujoco_joint_arc_mirrors = _build_o20_mujoco_joint_arc_mirrors(self.urdf_joint_limits)
+        self.mujoco_joint_arc_remaps = _build_o20_mujoco_joint_arc_remaps(
+            self.urdf_joint_limits,
+            self.robot_original,
+            self.robot_opose,
+            self.robot_fist,
+        )
 
         finger_configs = _resolve_version_config(FINGER_CONFIGS, self.glove_version)
         self.effective_robot_original, self.effective_robot_opose, self.effective_robot_fist = (
@@ -259,6 +358,37 @@ class RightHand:
             self.effective_robot_fist[1],
         )
 
+    def _map_thumb_cmc_roll(self, filtered_joint_arc, raw_joint_arc):
+        if (self.calibrationoriginal is None or self.calibrationopose is None
+                or self.calibrationfistpose is None):
+            return None
+        if _matches_calibration_pose(raw_joint_arc, self.calibrationoriginal):
+            return self.robot_original[0]
+        if _matches_calibration_pose(raw_joint_arc, self.calibrationopose):
+            return self.robot_opose[0]
+        if _matches_calibration_pose(raw_joint_arc, self.calibrationfistpose):
+            return self.robot_fist[0]
+
+        config = self.multi_state_mapper.finger_configs.get("thumb_rotate")
+        if not config:
+            return None
+
+        current = np.array(filtered_joint_arc, dtype=float)
+        original = np.array(self.calibrationoriginal, dtype=float)
+        opose = np.array(self.calibrationopose, dtype=float)
+        fist = np.array(self.calibrationfistpose, dtype=float)
+        value = self.multi_state_mapper._fused_value(current, config)
+
+        return _map_piecewise_linear(
+            value,
+            self.multi_state_mapper._fused_value(fist, config),
+            self.multi_state_mapper._fused_value(opose, config),
+            self.multi_state_mapper._fused_value(original, config),
+            self.robot_original[0],
+            self.robot_opose[0],
+            self.robot_fist[0],
+        )
+
     def set_glove_version(self, version: str):
         if not version:
             return
@@ -298,7 +428,7 @@ class RightHand:
         self.multi_state_mapper.add_state('opose', glove_opose, self.robot_opose)
         self.multi_state_mapper.add_state('fist', glove_fist, self.robot_fist)
 
-        self.multi_state_mapper.set_state_order(list(MULTI_SEGMENT_CONFIG_FROZEN))
+        self.multi_state_mapper.set_state_order(MULTI_SEGMENT_CONFIG['states'])
 
     def _to_list(self, data):
         """转换为列表"""
@@ -351,16 +481,30 @@ class RightHand:
 
         return smoothed
 
+    def _is_exact_fist_pose(self, joint_arc) -> bool:
+        return _matches_calibration_pose(joint_arc, self.calibrationfistpose)
+
+    def _is_exact_calibration_pose(self, joint_arc) -> bool:
+        return (
+            _matches_calibration_pose(joint_arc, self.calibrationoriginal)
+            or _matches_calibration_pose(joint_arc, self.calibrationopose)
+            or _matches_calibration_pose(joint_arc, self.calibrationfistpose)
+        )
+
     def joint_update(self, joint_arc):
         """
         右手映射 - 基于标定数据和预期机械手动作的映射器完成
         """
         qpos = np.zeros(25)
+        is_exact_fist_pose = self._is_exact_fist_pose(joint_arc)
+        is_exact_calibration_pose = self._is_exact_calibration_pose(joint_arc)
         # ========== 使用映射器进行精确映射 ==========
         if self.calibrationoriginal is not None and self.calibrationfistpose is not None and self.calibrationopose is not None:
+            if is_exact_calibration_pose and self.smooth_enabled:
+                self.multi_state_mapper.reset_filter(joint_arc)
             arc_value = self.multi_state_mapper.map_glove_to_robot(
                 joint_arc,
-                use_filter=self.smooth_enabled,
+                use_filter=self.smooth_enabled and not is_exact_calibration_pose,
             )
         # ========== 没有标定数据时使用手动映射 ==========
         else:
@@ -369,9 +513,13 @@ class RightHand:
             filtered_joint_arc = self.multi_state_mapper.last_filtered_glove
             if filtered_joint_arc is None:
                 filtered_joint_arc = joint_arc
+            thumb_cmc_roll = self._map_thumb_cmc_roll(filtered_joint_arc, joint_arc)
+            if thumb_cmc_roll is not None:
+                arc_value[0] = thumb_cmc_roll
             thumb_cmc_yaw = self._map_thumb_cmc_yaw(filtered_joint_arc)
             if thumb_cmc_yaw is not None:
                 arc_value[1] = thumb_cmc_yaw
+            arc_value = _clamp_robot_arc_values(arc_value, self.urdf_joint_limits)
 
             qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
             qpos[17] = self.g_jointpositions_arc[1] = arc_value[1]
@@ -383,7 +531,14 @@ class RightHand:
             qpos[2] = self.g_jointpositions_arc[7] = arc_value[6]
             qpos[3] = self.g_jointpositions_arc[8] = 0
 
-            qpos[4] = self.g_jointpositions_arc[17] = arc_value[13]
+            qpos[4] = arc_value[13]
+            self.g_jointpositions_arc[17] = _reverse_between(
+                arc_value[13],
+                self.robot_original[13],
+                self.robot_fist[13],
+                0.0,
+                self.robot_original[13],
+            )
             qpos[5] = self.g_jointpositions_arc[18] = arc_value[14]
             qpos[6] = self.g_jointpositions_arc[19] = arc_value[15]
             qpos[7] = self.g_jointpositions_arc[4] = 0
@@ -393,11 +548,24 @@ class RightHand:
             qpos[10] = self.g_jointpositions_arc[11] = arc_value[9]
             qpos[11] = self.g_jointpositions_arc[12] = 0
 
-            qpos[12] = self.g_jointpositions_arc[13] = arc_value[10]
+            qpos[12] = arc_value[10]
+            self.g_jointpositions_arc[13] = _reverse_between(
+                arc_value[10],
+                self.robot_original[10],
+                self.robot_fist[10],
+                0.0,
+                self.robot_original[13],
+            )
             qpos[13] = self.g_jointpositions_arc[14] = arc_value[11]
             qpos[14] = self.g_jointpositions_arc[15] = arc_value[12]
             qpos[15] = self.g_jointpositions_arc[16] = 0
-            self.g_jointpositions_arc = self._apply_arc_smooth(self.g_jointpositions_arc)
+            if is_exact_calibration_pose:
+                self.smooth_positions_arc = list(self.g_jointpositions_arc)
+            else:
+                self.g_jointpositions_arc = self._apply_arc_smooth(self.g_jointpositions_arc)
+
+            if self._should_log_thumb_roll_debug():
+                self._log_thumb_roll_debug("right", joint_arc, filtered_joint_arc, arc_value)
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2
@@ -422,6 +590,50 @@ class RightHand:
         # for i in range(len(self.g_jointpositions)):
         #     if i % 5 != 0:
         #         self.g_jointpositions[i] = 0
+
+    def _should_log_thumb_roll_debug(self):
+        debug_setting = getattr(self.multi_state_mapper, "isdebug", False)
+        if isinstance(debug_setting, list):
+            enabled = "thumb_rotate" in debug_setting
+        else:
+            enabled = bool(debug_setting)
+        if not enabled:
+            return False
+        self._debug_roll_counter += 1
+        return self._debug_roll_counter % 30 == 1
+
+    def _log_thumb_roll_debug(self, hand, joint_arc, filtered_joint_arc, arc_value):
+        config = self.multi_state_mapper.finger_configs.get("thumb_rotate", {})
+        joints = list(config.get("joints", []))
+        weights = list(config.get("weights", []))
+        raw_values = [float(joint_arc[index]) for index in joints if index < len(joint_arc)]
+        filtered_values = [
+            float(filtered_joint_arc[index])
+            for index in joints
+            if index < len(filtered_joint_arc)
+        ]
+        source_values = {}
+        for state_name, state in (
+            ("open", self.calibrationoriginal),
+            ("opose", self.calibrationopose),
+            ("fist", self.calibrationfistpose),
+        ):
+            if state is None:
+                continue
+            source_values[state_name] = [
+                float(state[index]) for index in joints if index < len(state)
+            ]
+
+        print(
+            "[O20 thumb_cmc_roll debug] "
+            f"hand={hand}, joints={joints}, weights={weights}, "
+            f"raw={raw_values}, filtered={filtered_values}, "
+            f"calibration={source_values}, "
+            f"arc_value0={float(arc_value[0])}, "
+            f"g_arc0={float(self.g_jointpositions_arc[0])}, "
+            f"robot_targets(open/opose/fist)="
+            f"({self.robot_original[0]}, {self.robot_opose[0]}, {self.robot_fist[0]})"
+        )
 
 
     def speed_update(self):
@@ -498,6 +710,14 @@ class LeftHand:
         self.robot_original = ROBOT_ORIGINAL_LEFT
         self.robot_opose = ROBOT_OPOSE_LEFT
         self.robot_fist = ROBOT_FIST_LEFT
+        self.urdf_joint_limits = _resolve_o20_urdf_joint_limits(self.handcore, "left")
+        self.mujoco_joint_arc_mirrors = _build_o20_mujoco_joint_arc_mirrors(self.urdf_joint_limits)
+        self.mujoco_joint_arc_remaps = _build_o20_mujoco_joint_arc_remaps(
+            self.urdf_joint_limits,
+            self.robot_original,
+            self.robot_opose,
+            self.robot_fist,
+        )
 
         finger_configs = _resolve_version_config(FINGER_CONFIGS, self.glove_version)
         self.effective_robot_original, self.effective_robot_opose, self.effective_robot_fist = (
@@ -590,7 +810,7 @@ class LeftHand:
         self.multi_state_mapper.add_state('opose', glove_opose, self.robot_opose)
         self.multi_state_mapper.add_state('fist', glove_fist, self.robot_fist)
 
-        self.multi_state_mapper.set_state_order(list(MULTI_SEGMENT_CONFIG_FROZEN))
+        self.multi_state_mapper.set_state_order(MULTI_SEGMENT_CONFIG['states'])
 
     def _to_list(self, data):
         """转换为列表"""
@@ -643,16 +863,30 @@ class LeftHand:
 
         return smoothed
 
+    def _is_exact_fist_pose(self, joint_arc) -> bool:
+        return _matches_calibration_pose(joint_arc, self.calibrationfistpose)
+
+    def _is_exact_calibration_pose(self, joint_arc) -> bool:
+        return (
+            _matches_calibration_pose(joint_arc, self.calibrationoriginal)
+            or _matches_calibration_pose(joint_arc, self.calibrationopose)
+            or _matches_calibration_pose(joint_arc, self.calibrationfistpose)
+        )
+
     def joint_update(self, joint_arc):
         """
         右手映射 - 基于标定数据和预期机械手动作的映射器完成
         """
         qpos = np.zeros(25)
+        is_exact_fist_pose = self._is_exact_fist_pose(joint_arc)
+        is_exact_calibration_pose = self._is_exact_calibration_pose(joint_arc)
         # ========== 使用映射器进行精确映射 ==========
         if self.calibrationoriginal is not None and self.calibrationfistpose is not None and self.calibrationopose is not None:
+            if is_exact_calibration_pose and self.smooth_enabled:
+                self.multi_state_mapper.reset_filter(joint_arc)
             arc_value = self.multi_state_mapper.map_glove_to_robot(
                 joint_arc,
-                use_filter=self.smooth_enabled,
+                use_filter=self.smooth_enabled and not is_exact_calibration_pose,
             )
         # ========== 没有标定数据时使用手动映射 ==========
         else:
@@ -665,6 +899,7 @@ class LeftHand:
             thumb_cmc_yaw = self._map_thumb_cmc_yaw(filtered_joint_arc)
             if thumb_cmc_yaw is not None:
                 arc_value[1] = thumb_cmc_yaw
+            arc_value = _clamp_robot_arc_values(arc_value, self.urdf_joint_limits)
 
             qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
             qpos[17] = self.g_jointpositions_arc[1] = arc_value[1]
@@ -690,7 +925,10 @@ class LeftHand:
             qpos[13] = self.g_jointpositions_arc[14] = arc_value[11]
             qpos[14] = self.g_jointpositions_arc[15] = arc_value[12]
             qpos[15] = self.g_jointpositions_arc[16] = 0
-            self.g_jointpositions_arc = self._apply_arc_smooth(self.g_jointpositions_arc)
+            if is_exact_calibration_pose:
+                self.smooth_positions_arc = list(self.g_jointpositions_arc)
+            else:
+                self.g_jointpositions_arc = self._apply_arc_smooth(self.g_jointpositions_arc)
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2

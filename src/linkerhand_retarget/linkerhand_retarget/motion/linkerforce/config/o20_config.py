@@ -3,13 +3,13 @@ FINGER_CONFIGS = {
     # 含义解释：
     # robot_idx：URDF关节序列
 
-    # 拇指旋转3个关节的加权系数，人手的0/1/2序列，对应URDF的第1关节(下标0)
+    # 拇指旋转关节，对应URDF thumb_cmc_roll
     'thumb_rotate': {
         'name': '拇指旋转',
-        'joints': [1, 2],
+        'joints': [1],
         'weights': {
-            'v1': [1, 0],
-            'v2': [1, 0]
+            'v1': [1],
+            'v2': [1]
         },
         'robot_idx': 0,
         'type': 'thumb',
@@ -17,13 +17,11 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
-        'reverse_output_direction': True,
-        'range_states': ['original', 'fist'],
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
-            'extended_exp_factor': 0.5
+            'extended_exp_factor': 10
         }
     },
     # 拇指侧摆3个关节的加权系数，人手的0/1/2序列，对应URDF的第2关节(下标1)
@@ -40,12 +38,10 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
-        'reverse_output_direction': True,
-        'range_states': ['original', 'fist'],
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 1.0
         }
     },
@@ -80,7 +76,7 @@ FINGER_CONFIGS = {
         # },
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 30
         }
     },
@@ -120,11 +116,10 @@ FINGER_CONFIGS = {
             'v2': False
         },
         'dynamic_weight': None,
-        'state_order': ['original', 'fist'],
-        'range_states': ['original', 'fist'],
         'extended_mapping': {
-            'enabled': False,
+            'enabled': True,
             'scale_factor': 1.0,
+            'extended_exp_factor': 1.0,
         }
     },
     # 食指弯曲（根部弯曲）的加权系数，人身的6/7/8序列，对应URDF的第4关节(下标3)
@@ -144,7 +139,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 5
         }
     },
@@ -166,7 +161,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 30
+            'extended_exp_factor': 5
         }
     },
     # 中指ROLL旋转（侧摆）关节的加权系数，人手的5序列，对应URDF的第4关节(下标3)
@@ -183,10 +178,7 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
-        'reverse_output_direction': True,
         'dynamic_weight': None,
-        'state_order': ['original', 'fist'],
-        'range_states': ['original', 'fist'],
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
@@ -210,7 +202,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 5
         }
     },
@@ -232,7 +224,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 30
+            'extended_exp_factor': 5
         }
     },
     # 无名指ROLL旋转（侧摆）关节的加权系数，人手的5序列，对应URDF的第4关节(下标3)
@@ -249,13 +241,11 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
-        'reverse_output_direction': True,
         'dynamic_weight': None,
-        'state_order': ['original', 'fist'],
-        'range_states': ['original', 'fist'],
         'extended_mapping': {
-            'enabled': False,
+            'enabled': True,
             'scale_factor': 1.0,
+            'extended_exp_factor': 1.0,
         }
     },
     # 无名指弯曲（根部弯曲）的加权系数，人手的14/15/16序列，对应URDF的第8关节(下标7)
@@ -275,7 +265,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 5
         }
     },
@@ -297,7 +287,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 30
+            'extended_exp_factor': 5
         }
     },
     # 小指ROLL旋转（侧摆）关节的加权系数，人手的5序列，对应URDF的第4关节(下标3)
@@ -314,13 +304,11 @@ FINGER_CONFIGS = {
             'v1': False,
             'v2': False
         },
-        'reverse_output_direction': True,
         'dynamic_weight': None,
-        'state_order': ['original', 'fist'],
-        'range_states': ['original', 'fist'],
         'extended_mapping': {
-            'enabled': False,
+            'enabled': True,
             'scale_factor': 1.0,
+            'extended_exp_factor': 1.0,
         }
     },
     # 小指弯曲（根部弯曲）的加权系数，人手的18/19/20序列，对应URDF的第10关节(下标9)
@@ -340,7 +328,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1,
             'extended_exp_factor': 5
         }
     },
@@ -400,11 +388,11 @@ ROBOT_ORIGINAL_LEFT = [
 ]
 
 ROBOT_ORIGINAL_RIGHT = [
-   -0.52, 1.57, 0.0, 0.0,
-   -0.35, 0.0, 0.0,
-   -0.26, 0.0, 0.0,
-   -0.20, 0.0, 0.0,
-   -0.21, 0.0, 0.0
+    0, 1.197, 0.2, 0.0,
+   -0.137, 0.0, 0.0,
+   -0.002, 0.0, 0.0,
+   -0.130, 0.0, 0.0,
+   -0.210, 0.0, 0.0
 ]
 
 ROBOT_OPOSE_LEFT = [
@@ -424,16 +412,16 @@ ROBOT_OPOSE_RIGHT = [
 ]
 
 ROBOT_FIST_RIGHT = [
-    0.52,  0.0,  0.83,  1.25,
-    0.09,  1.85,  1.85,
-    0.26,  1.85,  1.85,
-    0.20,  1.85,  1.85,
-    0.09,  1.85,  1.85
+    0.52,  0.0,  0.484,  1.279,
+    0.0, 1.645,  1.85,
+    0.0,  1.67,  1.709,
+    0.0,  1.64,  1.773,
+    0.0,  1.724,  1.850
 ]
 
 ROBOT_FIST_LEFT = [
     0.5236,  0,  0.84,  1.26,
-   -0.08726,  1.9548,  1.9897,
+   0,  1.9548,  1.9897,
     0.267,  1.9548,  1.9897,
     0.2112,  1.9548,  1.9897,
     0.08726,  1.9548,  1.9897

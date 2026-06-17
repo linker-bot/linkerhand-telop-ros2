@@ -514,6 +514,42 @@ def test_prepare_mujoco_model_xml_applies_display_translation(tmp_path):
     assert transform_joint.find("origin").attrib["xyz"] == "0 0 -0.5"
 
 
+def test_prepare_mujoco_model_xml_keeps_o20_right_ring_roll_axis_unchanged(tmp_path):
+    model_dir = tmp_path / "o20_right"
+    model_dir.mkdir()
+    urdf_path = model_dir / "linkerhand_o20_right.urdf"
+    urdf_path.write_text(
+        """
+        <robot name="o20_right">
+          <link name="base" />
+          <link name="index" />
+          <link name="ring" />
+          <joint name="index_mcp_roll" type="revolute">
+            <parent link="base" />
+            <child link="index" />
+            <axis xyz="1 0 0" />
+            <limit lower="-0.35" upper="0.09" effort="1" velocity="1" />
+          </joint>
+          <joint name="ring_mcp_roll" type="revolute">
+            <parent link="base" />
+            <child link="ring" />
+            <axis xyz="-1 0 0" />
+            <limit lower="-0.2" upper="0.2" effort="1" velocity="1" />
+          </joint>
+        </robot>
+        """,
+        encoding="utf-8",
+    )
+
+    xml = prepare_mujoco_model_xml(urdf_path)
+    robot = transform_urdf_for_mujoco_display(xml)
+
+    index_axis = robot.find("./joint[@name='index_mcp_roll']/axis")
+    ring_axis = robot.find("./joint[@name='ring_mcp_roll']/axis")
+    assert index_axis.attrib["xyz"] == "1 0 0"
+    assert ring_axis.attrib["xyz"] == "-1 0 0"
+
+
 def test_extract_mujoco_joint_positions_uses_latest_handcore_qpos():
     handcore = SimpleNamespace(
         last_qpos_r=[0.1, 0.2, 0.3],
@@ -554,6 +590,30 @@ def test_extract_mujoco_joint_positions_prefers_hand_arc_radians():
         "thumb_cmc_yaw": -0.2,
         "thumb_cmc_pitch": 0.3,
     }
+
+
+def test_extract_mujoco_joint_positions_applies_piecewise_arc_remap():
+    hand = SimpleNamespace(
+        g_jointpositions_arc=[1.0],
+        mujoco_joint_arc_indices=[0],
+        mujoco_joint_arc_signs=[1.0],
+        mujoco_joint_arc_remaps=[
+            (
+                (0.0, 0.0),
+                (1.0, 10.0),
+                (2.0, 11.0),
+            )
+        ],
+    )
+
+    positions = extract_mujoco_joint_positions(
+        None,
+        hand="right",
+        movable_joint_names=["thumb_cmc_roll"],
+        hand_model=hand,
+    )
+
+    assert positions["thumb_cmc_roll"] == pytest.approx(10.0)
 
 
 def test_get_urdf_mimic_joint_rules_reads_multiplier_and_offset(tmp_path):

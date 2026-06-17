@@ -80,7 +80,27 @@ def test_extended_two_state_mapping_uses_fist_anchor_when_available():
     mapper.add_state("fist", [2.0], [1.85])
     mapper.set_state_order(["original", "opose"])
 
-    assert mapper.map_glove_to_robot([1.5])[0] == pytest.approx(1.125)
+    assert mapper.map_glove_to_robot([1.5])[0] == pytest.approx(1.3)
+
+
+def test_extended_two_state_mapping_uses_opose_to_fist_segment_after_opose():
+    mapper = SimpleLinearMapper(
+        {
+            "roll": {
+                "joints": [0],
+                "weights": [1.0],
+                "robot_idx": 0,
+                "extended_mapping": {"enabled": True},
+            }
+        },
+        ["roll"],
+    )
+    mapper.add_state("original", [0.0], [-0.21])
+    mapper.add_state("opose", [1.0], [-0.21])
+    mapper.add_state("fist", [2.0], [0.0])
+    mapper.set_state_order(["original", "opose"])
+
+    assert mapper.map_glove_to_robot([1.5])[0] == pytest.approx(-0.105)
 
 
 def test_extended_two_state_mapping_applies_scale_factor_before_opose():
@@ -127,7 +147,7 @@ def test_extended_two_state_mapping_applies_exp_factor_after_opose():
     mapper.add_state("fist", [2.0], [30.0])
     mapper.set_state_order(["original", "opose"])
 
-    assert mapper.map_glove_to_robot([1.2])[0] == pytest.approx(12.8)
+    assert mapper.map_glove_to_robot([1.2])[0] == pytest.approx(15.6)
     assert mapper.map_glove_to_robot([3.0])[0] == pytest.approx(30.0)
 
 
@@ -163,7 +183,7 @@ def test_optional_kalman_filter_smooths_input_before_mapping():
         ["joint"],
     )
     mapper.add_state("original", [0.0], [0.0])
-    mapper.add_state("opose", [1.0], [1.0])
+    mapper.add_state("opose", [2.0], [2.0])
     mapper.set_state_order(["original", "opose"])
 
     first = mapper.map_glove_to_robot([0.5], use_filter=True)[0]
@@ -172,6 +192,29 @@ def test_optional_kalman_filter_smooths_input_before_mapping():
     assert first == pytest.approx(0.5)
     assert 0.5 < second < 0.7
     assert mapper.last_filtered_glove[0] == pytest.approx(second)
+
+
+def test_reset_filter_sets_next_filtered_baseline():
+    mapper = SimpleLinearMapper(
+        {
+            "joint": {
+                "joints": [0],
+                "weights": [1.0],
+                "robot_idx": 0,
+            }
+        },
+        ["joint"],
+    )
+    mapper.add_state("original", [0.0], [0.0])
+    mapper.add_state("opose", [2.0], [2.0])
+    mapper.set_state_order(["original", "opose"])
+
+    mapper.map_glove_to_robot([0.2], use_filter=True)
+    mapper.reset_filter([1.0])
+    result = mapper.map_glove_to_robot([1.1], use_filter=True)[0]
+
+    assert result == pytest.approx(mapper.last_filtered_glove[0])
+    assert 1.0 < result < 1.1
 
 
 def test_reverse_output_direction_flips_mapped_arc_without_display_signs():

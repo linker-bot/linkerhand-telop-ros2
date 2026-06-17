@@ -27,6 +27,9 @@ class SimpleLinearMapper:
         self.raw_history = []
         self.filtered_history = []
 
+    def set_debug(self, enabled=True):
+        self.isdebug = enabled
+
     def add_state(self, state_name: str, glove_angles: Sequence[float], robot_angles: Sequence[float]):
         self.glove_states[state_name] = np.array(glove_angles, dtype=float)
         self.robot_states[state_name] = np.array(robot_angles, dtype=float)
@@ -99,6 +102,32 @@ class SimpleLinearMapper:
             self.filtered_history = self.filtered_history[-max_history:]
 
         return filtered
+
+    def reset_filter(self, current=None):
+        if current is None:
+            self.filters = None
+            self._filter_channels = 0
+            self._filter_initialized = False
+            self.last_filtered_glove = None
+            return
+
+        current_array = np.array(current, dtype=float)
+        self._filter_channels = len(current_array)
+        self.filters = MultiChannelKalmanFilter(
+            num_channels=self._filter_channels,
+            process_variance=1e-5,
+            measurement_variance=0.0005,
+            initial_values=current_array.tolist(),
+        )
+        self.filters.reset(current_array.tolist())
+        self._filter_initialized = True
+        self.last_filtered_glove = current_array.copy()
+        self.raw_history.append(current_array.copy())
+        self.filtered_history.append(current_array.copy())
+        max_history = 100
+        if len(self.raw_history) > max_history:
+            self.raw_history = self.raw_history[-max_history:]
+            self.filtered_history = self.filtered_history[-max_history:]
 
     def _map_config(self, current: np.ndarray, config: Dict) -> float:
         states = list(config.get("state_order") or self.state_order)
@@ -240,15 +269,14 @@ class SimpleLinearMapper:
         if self._at_or_beyond(value, source_opose, source_fist):
             return target_fist
 
-        t = normalized - 1.0
-        extension = slope * t * (1.0 + (exp_factor - 1.0) * t)
-        result = target_opose + extension
+        if abs(source_fist - source_opose) < 1e-12:
+            return target_fist
 
-        if slope > 0:
-            return min(result, target_fist)
-        if slope < 0:
-            return max(result, target_fist)
-        return target_opose
+        t = (value - source_opose) / (source_fist - source_opose)
+        t = self._clamp(t, 0.0, 1.0)
+        progress = t * (1.0 + (exp_factor - 1.0) * t)
+        result = target_opose + (target_fist - target_opose) * progress
+        return self._clamp(result, min(target_opose, target_fist), max(target_opose, target_fist))
 
     @staticmethod
     def _at_or_beyond(value: float, start: float, end: float) -> bool:

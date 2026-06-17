@@ -1293,6 +1293,7 @@ class Retarget():
         # 处理映射器调试开关
         if 'mapper_debug' in param:
             mapper_debug_enabled = param['mapper_debug']
+            self.baseconfig.setdefault('debug', {})['mapper_debug'] = mapper_debug_enabled
             if hasattr(self.righthand, 'multi_state_mapper') and hasattr(self.righthand.multi_state_mapper, 'set_debug'):
                 self.righthand.multi_state_mapper.set_debug(mapper_debug_enabled)
             if hasattr(self.lefthand, 'multi_state_mapper') and hasattr(self.lefthand.multi_state_mapper, 'set_debug'):

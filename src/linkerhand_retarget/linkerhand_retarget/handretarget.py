@@ -141,6 +141,7 @@ class HandRetargetNode(Node):
         self.retarget = None
         self.mujoco_displays = []
         self.mujoco_timer = None
+        self._mujoco_debug_counter = 0
         self.datasource_type = DataSource[self.baseconfig["system"]["datasource_type"]]
         self.retargeting_type = RetargetingType[self.baseconfig["system"]["retargeting_type"]]
         self.motion_type = MotionSource[self.baseconfig["system"]["motion_type"]]
@@ -280,11 +281,35 @@ class HandRetargetNode(Node):
                     ),
                 )
                 if joint_positions:
+                    self._log_mujoco_thumb_roll_debug(display.hand, joint_positions)
                     display.update_joint_positions(joint_positions)
             except Exception as exc:
                 self.get_logger().warn(
                     f"MuJoCo display update failed; hand={display.hand}, error={exc}"
                 )
+
+    def _log_mujoco_thumb_roll_debug(self, hand, joint_positions):
+        debug_setting = self.baseconfig.get("debug", {}).get("mapper_debug", False)
+        if isinstance(debug_setting, list):
+            enabled = "thumb_rotate" in debug_setting
+        else:
+            enabled = bool(debug_setting)
+        if not enabled or hand != "right":
+            return
+        if self.robot_name_r != RobotName.o20:
+            return
+        self._mujoco_debug_counter += 1
+        if self._mujoco_debug_counter % 30 != 1:
+            return
+        hand_model = getattr(getattr(self, "retarget", None), "righthand", None)
+        arc_values = getattr(hand_model, "g_jointpositions_arc", None)
+        arc0 = arc_values[0] if arc_values and len(arc_values) > 0 else None
+        self.get_logger().warn(
+            "MuJoCo O20 thumb_cmc_roll sync: "
+            f"sent={joint_positions.get('thumb_cmc_roll')}, "
+            f"g_arc0={arc0}, "
+            f"joint_count={len(joint_positions)}"
+        )
 
     def teleop_param_callback(self, msg):
         """处理遥操作参数话题回调"""

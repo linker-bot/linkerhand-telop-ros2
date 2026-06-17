@@ -128,6 +128,8 @@ def _normalize_xyz(value) -> Tuple[float, float, float]:
 
 
 def _format_float(value: float) -> str:
+    if abs(float(value)) < 1e-12:
+        value = 0.0
     text = f"{float(value):.12f}".rstrip("0").rstrip(".")
     return text if text else "0"
 
@@ -285,7 +287,6 @@ def prepare_mujoco_model_xml(
         _normalize_rpy(model_rotate_rpy),
         _normalize_xyz(model_translate_xyz),
     )
-
     return ET.tostring(root, encoding="unicode")
 
 
@@ -330,6 +331,33 @@ def _optional_index(value) -> Optional[int]:
     return int(value)
 
 
+def _normalize_arc_remap(remap):
+    if remap is None:
+        return None
+
+    if len(remap) == 4 and not isinstance(remap[0], Iterable):
+        source_a, source_b, target_a, target_b = [float(item) for item in remap]
+        return ((source_a, target_a), (source_b, target_b))
+
+    return tuple((float(source), float(target)) for source, target in remap)
+
+
+def _apply_arc_remap(value: float, remap) -> float:
+    points = _normalize_arc_remap(remap)
+    if not points or len(points) < 2:
+        return value
+
+    for (source_a, target_a), (source_b, target_b) in zip(points, points[1:]):
+        if min(source_a, source_b) <= value <= max(source_a, source_b):
+            if abs(source_b - source_a) < 1e-12:
+                return target_b
+            ratio = (value - source_a) / (source_b - source_a)
+            ratio = min(1.0, max(0.0, ratio))
+            return target_a + ratio * (target_b - target_a)
+
+    return min(points, key=lambda point: abs(value - point[0]))[1]
+
+
 def extract_mujoco_joint_positions(
     handcore,
     hand: str,
@@ -340,6 +368,8 @@ def extract_mujoco_joint_positions(
     if arc_values is not None:
         arc_indices = getattr(hand_model, "mujoco_joint_arc_indices", None)
         arc_signs = getattr(hand_model, "mujoco_joint_arc_signs", None)
+        arc_remaps = getattr(hand_model, "mujoco_joint_arc_remaps", None)
+        arc_mirrors = getattr(hand_model, "mujoco_joint_arc_mirrors", None)
         if arc_indices:
             positions = {}
             for idx, (joint_name, arc_idx) in enumerate(zip(movable_joint_names, arc_indices)):
@@ -347,7 +377,19 @@ def extract_mujoco_joint_positions(
                 if arc_idx is None or arc_idx >= len(arc_values):
                     continue
                 sign = float(arc_signs[idx]) if arc_signs and idx < len(arc_signs) else 1.0
-                positions[joint_name] = float(arc_values[arc_idx]) * sign
+                value = float(arc_values[arc_idx]) * sign
+                remap = arc_remaps[idx] if arc_remaps and idx < len(arc_remaps) else None
+                if remap is not None:
+                    value = _apply_arc_remap(value, remap)
+                else:
+                    mirror = arc_mirrors[idx] if arc_mirrors and idx < len(arc_mirrors) else None
+                    if mirror is not None:
+                        lower, upper = mirror
+                        lower = float(lower)
+                        upper = float(upper)
+                        value = lower + upper - value
+                        value = min(upper, max(lower, value))
+                positions[joint_name] = value
             if positions:
                 return positions
         elif len(arc_values) == len(movable_joint_names):

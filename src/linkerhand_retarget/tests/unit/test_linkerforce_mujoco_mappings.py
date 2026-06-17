@@ -8,6 +8,7 @@ from linkerhand_retarget.motion.linkerforce.hand import (
     linkerforce_l10,
     linkerforce_l20,
     linkerforce_l6,
+    linkerforce_o20,
     linkerforce_o6,
 )
 
@@ -174,6 +175,45 @@ class FakeHandCore:
             },
         ),
         (
+            linkerforce_o20.RightHand,
+            (
+                "thumb_cmc_roll",
+                "thumb_cmc_yaw",
+                "thumb_cmc_pitch",
+                "thumb_mcp",
+                "index_mcp_roll",
+                "index_mcp_pitch",
+                "index_pip",
+                "middle_mcp_roll",
+                "middle_mcp_pitch",
+                "middle_pip",
+                "ring_mcp_roll",
+                "ring_mcp_pitch",
+                "ring_pip",
+                "pinky_mcp_roll",
+                "pinky_mcp_pitch",
+                "pinky_pip",
+            ),
+            {
+                "thumb_cmc_roll": 0.0,
+                "thumb_cmc_yaw": 0.57,
+                "thumb_cmc_pitch": 2.0,
+                "thumb_mcp": 3.0,
+                "index_mcp_roll": 5.0,
+                "index_mcp_pitch": 6.0,
+                "index_pip": 7.0,
+                "middle_mcp_roll": 9.0,
+                "middle_mcp_pitch": 10.0,
+                "middle_pip": 11.0,
+                "ring_mcp_roll": 13.0,
+                "ring_mcp_pitch": 14.0,
+                "ring_pip": 15.0,
+                "pinky_mcp_roll": 17.0,
+                "pinky_mcp_pitch": 18.0,
+                "pinky_pip": 19.0,
+            },
+        ),
+        (
             linkerforce_l20.RightHand,
             (
                 "thumb_cmc_roll",
@@ -237,7 +277,7 @@ def test_linkerforce_mujoco_display_maps_active_arcs_to_urdf_joints(
         hand_model=hand,
     )
 
-    assert positions == expected
+    assert positions == pytest.approx(expected)
 
 
 def test_g20_l20_mujoco_display_routes_passive_distal_joints():
