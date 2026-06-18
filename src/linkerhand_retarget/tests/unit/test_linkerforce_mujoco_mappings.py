@@ -196,7 +196,7 @@ class FakeHandCore:
             ),
             {
                 "thumb_cmc_roll": 0.0,
-                "thumb_cmc_yaw": 0.57,
+                "thumb_cmc_yaw": 1.0,
                 "thumb_cmc_pitch": 2.0,
                 "thumb_mcp": 3.0,
                 "index_mcp_roll": 5.0,

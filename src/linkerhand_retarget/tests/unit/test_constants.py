@@ -485,7 +485,7 @@ class TestRobotNameMap:
         assert lower <= ROBOT_ORIGINAL_RIGHT[1] <= upper
         assert lower <= ROBOT_FIST_RIGHT[1] <= upper
 
-    def test_o20_mujoco_thumb_abduction_display_uses_mirrored_range(self, monkeypatch):
+    def test_o20_mujoco_thumb_abduction_display_uses_direct_mapped_angles(self, monkeypatch):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         monkeypatch.syspath_prepend(str(package_dir))
 
@@ -511,13 +511,8 @@ class TestRobotNameMap:
             )
             yaw_joint = ET.parse(urdf_path).getroot().find("./joint[@name='thumb_cmc_yaw']")
             yaw_axis = yaw_joint.find("axis")
-            yaw_limit = yaw_joint.find("limit")
-            expected_mirror = (
-                float(yaw_limit.attrib["lower"]),
-                float(yaw_limit.attrib["upper"]),
-            )
 
-            assert hand_cls(handcore=None).mujoco_joint_arc_mirrors[1] == pytest.approx(expected_mirror)
+            assert hand_cls(handcore=None).mujoco_joint_arc_mirrors[1] is None
             if side == "right":
                 assert yaw_axis.attrib["xyz"] == "1 0 0"
 

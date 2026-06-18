@@ -103,10 +103,7 @@ def _resolve_o20_urdf_joint_limits(handcore: HandCore, hand: str):
 
 
 def _build_o20_mujoco_joint_arc_mirrors(joint_limits):
-    mirrors = [None] * len(O20_MUJOCO_JOINT_ARC_INDICES)
-    if len(joint_limits) > 1:
-        mirrors[1] = tuple(joint_limits[1])
-    return tuple(mirrors)
+    return tuple([None] * len(O20_MUJOCO_JOINT_ARC_INDICES))
 
 
 def _build_o20_mujoco_joint_arc_remaps(
@@ -120,6 +117,12 @@ def _build_o20_mujoco_joint_arc_remaps(
             (robot_original[0], robot_original[0]),
             (robot_opose[0], robot_opose[0]),
             (robot_fist[0], robot_fist[0]),
+        )
+    if len(joint_limits) > 1:
+        lower, upper = joint_limits[1]
+        remaps[1] = (
+            (lower, lower),
+            (upper, upper),
         )
     return tuple(remaps)
 

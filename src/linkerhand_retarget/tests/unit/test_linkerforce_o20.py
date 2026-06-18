@@ -266,7 +266,7 @@ def test_o20_outputs_urdf_arcs_with_mujoco_display_mirroring():
     assert open_arcs[1] > fist_arcs[1]
 
 
-def test_o20_mujoco_display_clamps_mapped_yaw_to_urdf_limits():
+def test_o20_mujoco_display_clamps_mapped_yaw_to_urdf_limits_without_mirroring():
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
     hand.calibrationoriginal, hand.calibrationopose, hand.calibrationfistpose = _state_calibration()
@@ -280,7 +280,7 @@ def test_o20_mujoco_display_clamps_mapped_yaw_to_urdf_limits():
         hand_model=hand,
     )
 
-    assert positions["thumb_cmc_yaw"] == pytest.approx(0.0)
+    assert positions["thumb_cmc_yaw"] == pytest.approx(1.57)
 
 
 def test_o20_mujoco_display_maps_right_thumb_cmc_roll_through_configured_anchors():
@@ -315,6 +315,39 @@ def test_o20_mujoco_display_maps_right_thumb_cmc_roll_through_configured_anchors
     assert open_positions["thumb_cmc_roll"] == pytest.approx(ROBOT_ORIGINAL_RIGHT[0])
     assert positions["thumb_cmc_roll"] == pytest.approx(ROBOT_OPOSE_RIGHT[0])
     assert fist_positions["thumb_cmc_roll"] == pytest.approx(ROBOT_FIST_RIGHT[0])
+
+
+def test_o20_left_mujoco_display_preserves_thumb_cmc_yaw_direction():
+    hand = LeftHand(FakeHandCore())
+    hand.smooth_enabled = False
+    hand.calibrationoriginal, hand.calibrationopose, hand.calibrationfistpose = _state_calibration()
+    hand.initialize_mapper()
+
+    hand.joint_update(hand.calibrationoriginal)
+    open_positions = extract_mujoco_joint_positions(
+        None,
+        "left",
+        ["thumb_cmc_roll", "thumb_cmc_yaw"],
+        hand_model=hand,
+    )
+    hand.joint_update(hand.calibrationopose)
+    opose_positions = extract_mujoco_joint_positions(
+        None,
+        "left",
+        ["thumb_cmc_roll", "thumb_cmc_yaw"],
+        hand_model=hand,
+    )
+    hand.joint_update(hand.calibrationfistpose)
+    fist_positions = extract_mujoco_joint_positions(
+        None,
+        "left",
+        ["thumb_cmc_roll", "thumb_cmc_yaw"],
+        hand_model=hand,
+    )
+
+    assert open_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_ORIGINAL_LEFT[1])
+    assert opose_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_OPOSE_LEFT[1])
+    assert fist_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_FIST_LEFT[1])
 
 
 def test_o20_mujoco_sync_uses_real_urdf_joint_order_for_thumb_cmc_roll():
