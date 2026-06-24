@@ -28,6 +28,7 @@ import pickle
 import os
 import json
 import sys
+import serial.tools.list_ports
 import numpy as np
 import math
 import yaml
@@ -111,6 +112,9 @@ class Retarget():
         elif self.righthandtype == RobotName.o30:
             from .hand.linkerforce_o30 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand], is_debug=mapper_debug)
+        elif self.righthandtype == RobotName.o30i:
+            from .hand.linkerforce_o30i import RightHand
+            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand], is_debug=mapper_debug)
         elif self.righthandtype == RobotName.l25 \
             or self.righthandtype == RobotName.g20:
             from .hand.linkerforce_g20 import RightHand
@@ -144,6 +148,9 @@ class Retarget():
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
         elif self.lefthandtype == RobotName.o30:
             from .hand.linkerforce_o30 import LeftHand
+            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
+        elif self.lefthandtype == RobotName.o30i:
+            from .hand.linkerforce_o30i import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
         elif self.lefthandtype == RobotName.l25 \
             or self.lefthandtype == RobotName.g20:
@@ -396,6 +403,22 @@ class Retarget():
         if self.cmd_ports:
             candidate_ports = self.cmd_ports
             self.node.get_logger().info(f"使用命令行候选串口: {candidate_ports}")
+        elif auto_scan:
+            ports = serial.tools.list_ports.comports()
+            candidate_ports = [
+                port.device
+                for port in ports
+                if (
+                    port.device not in exclude_ports
+                    and (
+                        port.device.startswith("/dev/ttyUSB")
+                        or port.device.startswith("/dev/ttyACM")
+                        or port.device.startswith("/dev/ttyXRUSB")
+                        or port.device.startswith("/dev/ttyOBC")
+                    )
+                )
+            ]
+            self.node.get_logger().info(f"自动扫描候选串口: {candidate_ports}")
         else:
             candidate_ports = None
             self.node.get_logger().info(f"使用配置文件串口: 左手={saved_left.get('port')}, 右手={saved_right.get('port')}")
@@ -471,8 +494,7 @@ class Retarget():
             if self._load_from_tmp() is True:
                 self.node.get_logger().info("已加载缓存标定数据，跳过标定流程")
                 self.calibration = -1
-                self.righthand.initialize_mapper()
-                self.lefthand.initialize_mapper()
+                self._initialize_ready_mappers()
             else:
                 self.calibration = "auto_calibrate"
                 self.node.get_logger().info("未找到有效缓存，将进行自动标定")
@@ -845,6 +867,29 @@ class Retarget():
         
         is_stable = var_left < threshold and var_right < threshold
         return is_stable, max(var_left, var_right)
+
+    def _is_reader_connected(self, hand):
+        reader = getattr(self, f"force_reader_{hand}", None)
+        expected_handtype = "Left" if hand == "left" else "Right"
+        return reader is not None and getattr(reader, "handtype", None) == expected_handtype
+
+    def _has_complete_calibration(self, hand):
+        return (
+            getattr(hand, "calibrationoriginal", None) is not None
+            and getattr(hand, "calibrationopose", None) is not None
+            and getattr(hand, "calibrationfistpose", None) is not None
+        )
+
+    def _initialize_ready_mappers(self):
+        if self._has_complete_calibration(self.righthand):
+            self.righthand.initialize_mapper()
+        else:
+            self.node.get_logger().warn("右手标定数据不完整，跳过右手映射器初始化")
+
+        if self._has_complete_calibration(self.lefthand):
+            self.lefthand.initialize_mapper()
+        else:
+            self.node.get_logger().warn("左手标定数据不完整，跳过左手映射器初始化")
     
     def _calibration_with_progress(self, stability_window=30, stability_threshold=0.03):
         """
@@ -856,7 +901,17 @@ class Retarget():
         """
         self.calibration_data_left = []
         self.calibration_data_right = []
-        
+
+        left_valid = self._is_reader_connected("left")
+        right_valid = self._is_reader_connected("right")
+
+        if not left_valid and not right_valid:
+            print(f"{Fore.RED}没有可用的手套数据，无法采集标定样本{Fore.RESET}")
+            return
+
+        left_reader = self.force_reader_left if left_valid else None
+        right_reader = self.force_reader_right if right_valid else None
+
         temp_buffer_left = []
         temp_buffer_right = []
         
@@ -869,30 +924,42 @@ class Retarget():
                   bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{postfix}]",
                   postfix="") as pbar:
             while collected_duration < target_stable_duration:
-                left_pos = copy.deepcopy(self.force_reader_left.poslist)
-                right_pos = copy.deepcopy(self.force_reader_right.poslist)
-                
-                temp_buffer_left.append(left_pos)
-                temp_buffer_right.append(right_pos)
-                
-                if len(temp_buffer_left) > stability_window:
+                left_pos = copy.deepcopy(left_reader.poslist) if left_valid else None
+                right_pos = copy.deepcopy(right_reader.poslist) if right_valid else None
+
+                if left_valid:
+                    temp_buffer_left.append(left_pos)
+                if right_valid:
+                    temp_buffer_right.append(right_pos)
+
+                if left_valid and len(temp_buffer_left) > stability_window:
                     temp_buffer_left.pop(0)
+                if right_valid and len(temp_buffer_right) > stability_window:
                     temp_buffer_right.pop(0)
-                
-                if len(temp_buffer_left) < stability_window:
-                    pbar.set_postfix_str(f"{Fore.YELLOW}等待数据 {len(temp_buffer_left)}/{stability_window}{Fore.RESET}")
+
+                ready_counts = []
+                if left_valid:
+                    ready_counts.append(len(temp_buffer_left))
+                if right_valid:
+                    ready_counts.append(len(temp_buffer_right))
+
+                if min(ready_counts) < stability_window:
+                    pbar.set_postfix_str(f"{Fore.YELLOW}等待数据 {min(ready_counts)}/{stability_window}{Fore.RESET}")
                     pbar.refresh()
                     time.sleep(1.0 / 30)
                     continue
-                
-                var_left = np.var(temp_buffer_left, axis=0).mean()
-                var_right = np.var(temp_buffer_right, axis=0).mean()
-                
-                drift_left = np.abs(np.array(temp_buffer_left[-1]) - np.array(temp_buffer_left[0])).mean()
-                drift_right = np.abs(np.array(temp_buffer_right[-1]) - np.array(temp_buffer_right[0])).mean()
-                
-                variance = max(var_left, var_right)
-                drift = max(drift_left, drift_right)
+
+                variances = []
+                drifts = []
+                if left_valid:
+                    variances.append(np.var(temp_buffer_left, axis=0).mean())
+                    drifts.append(np.abs(np.array(temp_buffer_left[-1]) - np.array(temp_buffer_left[0])).mean())
+                if right_valid:
+                    variances.append(np.var(temp_buffer_right, axis=0).mean())
+                    drifts.append(np.abs(np.array(temp_buffer_right[-1]) - np.array(temp_buffer_right[0])).mean())
+
+                variance = max(variances)
+                drift = max(drifts)
                 
                 is_stable = (variance < stability_threshold and drift < stability_threshold)
                 
@@ -919,8 +986,8 @@ class Retarget():
                 time.sleep(1.0 / 30)
         
         if len(stability_samples) > 0:
-            self.calibration_data_left = [s[0] for s in stability_samples]
-            self.calibration_data_right = [s[1] for s in stability_samples]
+            self.calibration_data_left = [s[0] for s in stability_samples if s[0] is not None]
+            self.calibration_data_right = [s[1] for s in stability_samples if s[1] is not None]
             print(f"{Fore.GREEN}采集完成，有效样本: {len(stability_samples)} 帧{Fore.RESET}")
 
     def run_calibration(self):
@@ -928,8 +995,8 @@ class Retarget():
         执行自动标定流程
         """
         # 检查手套连接状态
-        left_valid = self.force_reader_left and self.force_reader_left.handtype == 'Left'
-        right_valid = self.force_reader_right and self.force_reader_right.handtype == 'Right'
+        left_valid = self._is_reader_connected("left")
+        right_valid = self._is_reader_connected("right")
         
         if not left_valid and not right_valid:
             print(f"\n{Fore.RED}【标定失败】左右手套均未连接，请检查设备连接后重试{Fore.RESET}\n")
@@ -938,67 +1005,144 @@ class Retarget():
         
         self.calibration_in_progress = True
         
-        # ===== 第一步：五指张开标定 (对应255) =====
+        # ===== 标定顺序 =====
+        # show_fist_calibration=True : fist -> opose -> open
+        # show_fist_calibration=False: opose -> open, fist 由延伸计算
         self.calibration_data_left = []
         self.calibration_data_right = []
         total_steps = 2 if not self.show_fist_calibration else 3
-        print(f"\n{Fore.GREEN}{'='*50}{Fore.RESET}")
-        print(f"{Fore.GREEN}【标定 1/{total_steps}】请保持五指张开姿势 (对应电机值255){Fore.RESET}")
-        print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
-        
-        self._calibration_with_progress(10)
-        
-        if len(self.calibration_data_left) > 0:
-            avg_left_open = self._calculate_weighted_average(self.calibration_data_left)
-            avg_right_open = self._calculate_weighted_average(self.calibration_data_right)
-            self.lefthand.calibrationoriginal = avg_left_open
-            self.righthand.calibrationoriginal = avg_right_open
-        else:
-            print(f"\n{Fore.RED}【标定失败】五指张开数据采集失败{Fore.RESET}\n")
-            self.calibration_in_progress = False
-            return False
-        
-        # ===== 第二步：O型标定 (对应中间值) =====
-        self.calibration_data_left = []
-        self.calibration_data_right = []
-        print(f"\n{Fore.MAGENTA}{'='*50}{Fore.RESET}")
-        print(f"{Fore.MAGENTA}【标定 2/{total_steps}】请保持O型手势 (对应电机中间值){Fore.RESET}")
-        print(f"{Fore.MAGENTA}{'='*50}{Fore.RESET}\n")
-        
-        self._calibration_with_progress(10)
-        
-        if len(self.calibration_data_left) > 0:
-            avg_left_opose = self._calculate_weighted_average(self.calibration_data_left)
-            avg_right_opose = self._calculate_weighted_average(self.calibration_data_right)
-            self.lefthand.calibrationopose = avg_left_opose
-            self.righthand.calibrationopose = avg_right_opose
-        else:
-            print(f"\n{Fore.RED}【标定失败】O型手势数据采集失败{Fore.RESET}\n")
-            self.calibration_in_progress = False
-            return False
-        
-        # ===== 第三步：握拳标定 (可选) =====
         if self.show_fist_calibration:
+            # ===== 第一步：握拳标定 (对应0) =====
             self.calibration_data_left = []
             self.calibration_data_right = []
             print(f"\n{Fore.YELLOW}{'='*50}{Fore.RESET}")
-            print(f"{Fore.YELLOW}【标定 3/{total_steps}】请握紧拳头 (对应电机值0){Fore.RESET}")
+            print(f"{Fore.YELLOW}【标定 1/{total_steps}】请握紧拳头 (对应电机值0){Fore.RESET}")
             print(f"{Fore.YELLOW}{'='*50}{Fore.RESET}\n")
-            
+
             self._calibration_with_progress(10)
-            
-            if len(self.calibration_data_left) > 0:
-                avg_left_fist = self._calculate_weighted_average(self.calibration_data_left)
-                avg_right_fist = self._calculate_weighted_average(self.calibration_data_right)
-                self.lefthand.calibrationfistpose = avg_left_fist
-                self.righthand.calibrationfistpose = avg_right_fist
-            else:
+
+            fist_ok = True
+            if left_valid:
+                if len(self.calibration_data_left) > 0:
+                    self.lefthand.calibrationfistpose = self._calculate_weighted_average(self.calibration_data_left)
+                else:
+                    fist_ok = False
+            if right_valid:
+                if len(self.calibration_data_right) > 0:
+                    self.righthand.calibrationfistpose = self._calculate_weighted_average(self.calibration_data_right)
+                else:
+                    fist_ok = False
+
+            if not fist_ok:
                 print(f"\n{Fore.RED}【标定失败】握拳数据采集失败{Fore.RESET}\n")
                 self.calibration_in_progress = False
                 return False
+
+            # ===== 第二步：O型标定 (对应中间值) =====
+            self.calibration_data_left = []
+            self.calibration_data_right = []
+            print(f"\n{Fore.MAGENTA}{'='*50}{Fore.RESET}")
+            print(f"{Fore.MAGENTA}【标定 2/{total_steps}】请保持O型手势 (对应电机中间值){Fore.RESET}")
+            print(f"{Fore.MAGENTA}{'='*50}{Fore.RESET}\n")
+
+            self._calibration_with_progress(10)
+
+            opose_ok = True
+            if left_valid:
+                if len(self.calibration_data_left) > 0:
+                    self.lefthand.calibrationopose = self._calculate_weighted_average(self.calibration_data_left)
+                else:
+                    opose_ok = False
+            if right_valid:
+                if len(self.calibration_data_right) > 0:
+                    self.righthand.calibrationopose = self._calculate_weighted_average(self.calibration_data_right)
+                else:
+                    opose_ok = False
+
+            if not opose_ok:
+                print(f"\n{Fore.RED}【标定失败】O型手势数据采集失败{Fore.RESET}\n")
+                self.calibration_in_progress = False
+                return False
+
+            # ===== 第三步：五指张开标定 (对应255) =====
+            self.calibration_data_left = []
+            self.calibration_data_right = []
+            print(f"\n{Fore.GREEN}{'='*50}{Fore.RESET}")
+            print(f"{Fore.GREEN}【标定 3/{total_steps}】请保持五指张开姿势 (对应电机值255){Fore.RESET}")
+            print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
+
+            self._calibration_with_progress(10)
+
+            open_ok = True
+            if left_valid:
+                if len(self.calibration_data_left) > 0:
+                    self.lefthand.calibrationoriginal = self._calculate_weighted_average(self.calibration_data_left)
+                else:
+                    open_ok = False
+            if right_valid:
+                if len(self.calibration_data_right) > 0:
+                    self.righthand.calibrationoriginal = self._calculate_weighted_average(self.calibration_data_right)
+                else:
+                    open_ok = False
+
+            if not open_ok:
+                print(f"\n{Fore.RED}【标定失败】五指张开数据采集失败{Fore.RESET}\n")
+                self.calibration_in_progress = False
+                return False
         else:
+            # ===== 第一步：O型标定 (对应中间值) =====
+            self.calibration_data_left = []
+            self.calibration_data_right = []
+            print(f"\n{Fore.MAGENTA}{'='*50}{Fore.RESET}")
+            print(f"{Fore.MAGENTA}【标定 1/{total_steps}】请保持O型手势 (对应电机中间值){Fore.RESET}")
+            print(f"{Fore.MAGENTA}{'='*50}{Fore.RESET}\n")
+
+            self._calibration_with_progress(10)
+
+            opose_ok = True
+            if left_valid:
+                if len(self.calibration_data_left) > 0:
+                    self.lefthand.calibrationopose = self._calculate_weighted_average(self.calibration_data_left)
+                else:
+                    opose_ok = False
+            if right_valid:
+                if len(self.calibration_data_right) > 0:
+                    self.righthand.calibrationopose = self._calculate_weighted_average(self.calibration_data_right)
+                else:
+                    opose_ok = False
+
+            if not opose_ok:
+                print(f"\n{Fore.RED}【标定失败】O型手势数据采集失败{Fore.RESET}\n")
+                self.calibration_in_progress = False
+                return False
+
+            # ===== 第二步：五指张开标定 (对应255) =====
+            self.calibration_data_left = []
+            self.calibration_data_right = []
+            print(f"\n{Fore.GREEN}{'='*50}{Fore.RESET}")
+            print(f"{Fore.GREEN}【标定 2/{total_steps}】请保持五指张开姿势 (对应电机值255){Fore.RESET}")
+            print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
+
+            self._calibration_with_progress(10)
+
+            open_ok = True
+            if left_valid:
+                if len(self.calibration_data_left) > 0:
+                    self.lefthand.calibrationoriginal = self._calculate_weighted_average(self.calibration_data_left)
+                else:
+                    open_ok = False
+            if right_valid:
+                if len(self.calibration_data_right) > 0:
+                    self.righthand.calibrationoriginal = self._calculate_weighted_average(self.calibration_data_right)
+                else:
+                    open_ok = False
+
+            if not open_ok:
+                print(f"\n{Fore.RED}【标定失败】五指张开数据采集失败{Fore.RESET}\n")
+                self.calibration_in_progress = False
+                return False
+
             self._calculate_fist_from_extension()
-        
         # ===== 保存标定数据 =====
         if self._save_to_tmp():
             print(f"\n{Fore.GREEN}{'='*50}{Fore.RESET}")
@@ -1006,8 +1150,7 @@ class Retarget():
             print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
         
         self.calibration_in_progress = False
-        self.righthand.initialize_mapper()
-        self.lefthand.initialize_mapper()
+        self._initialize_ready_mappers()
         return True
 
     def _calculate_fist_from_extension(self):
@@ -1015,29 +1158,26 @@ class Retarget():
         从 original 和 opose 延伸计算 fist 值
         fist = opose + (opose - original) * extend_ratio
         """
-        import numpy as np
-        
-        original_l = self.lefthand.calibrationoriginal
-        original_r = self.righthand.calibrationoriginal
-        opose_l = self.lefthand.calibrationopose
-        opose_r = self.righthand.calibrationopose
-        
-        if original_l is None or opose_l is None:
-            return
-        
         ratio = self.fist_extend_ratio
-        
-        fist_l = []
-        fist_r = []
-        for i in range(len(original_l)):
-            fist_l.append(opose_l[i] + (opose_l[i] - original_l[i]) * ratio)
-        for i in range(len(original_r)):
-            fist_r.append(opose_r[i] + (opose_r[i] - original_r[i]) * ratio)
-        
-        self.lefthand.calibrationfistpose = fist_l
-        self.righthand.calibrationfistpose = fist_r
-        
-        self.node.get_logger().info(f"[自动计算] 握拳值已从 O型延伸 {ratio*100:.0f}% 生成")
+
+        calculated = []
+        for hand_label, hand in (("左手", self.lefthand), ("右手", self.righthand)):
+            original = hand.calibrationoriginal
+            opose = hand.calibrationopose
+            if original is None or opose is None:
+                continue
+
+            length = min(len(original), len(opose))
+            hand.calibrationfistpose = [
+                opose[i] + (opose[i] - original[i]) * ratio
+                for i in range(length)
+            ]
+            calculated.append(hand_label)
+
+        if calculated:
+            self.node.get_logger().info(
+                f"[自动计算] {','.join(calculated)}握拳值已从 O型延伸 {ratio*100:.0f}% 生成"
+            )
 
     def _save_to_tmp(self):
         """
@@ -1078,9 +1218,12 @@ class Retarget():
         # 这个阈值表示两个向量之间的最小可接受差异
         MIN_DIFFERENCE_THRESHOLD = 3.0
         
+        right_connected = self._is_reader_connected("right")
+        left_connected = self._is_reader_connected("left")
+
         # 检查右手数据是否有效
         right_valid = False
-        if hasattr(self, 'force_reader_right') and self.force_reader_right.handtype == 'Right':
+        if right_connected:
             # 检查original和fistpose的差异
             if right_diff_original_fist > MIN_DIFFERENCE_THRESHOLD:
                 right_valid = True
@@ -1089,7 +1232,7 @@ class Retarget():
         
         # 检查左手数据是否有效
         left_valid = False
-        if hasattr(self, 'force_reader_left') and self.force_reader_left.handtype == 'Left':
+        if left_connected:
             # 检查original和fistpose的差异
             if left_diff_original_fist > MIN_DIFFERENCE_THRESHOLD:
                 left_valid = True
@@ -1252,9 +1395,10 @@ class Retarget():
         if self.calibration == "auto_calibrate":
             if not self.run_calibration():
                 self.node.get_logger().error("标定失败，退出程序")
-                return
+                return False
             self.calibration = -1
         self.node.create_timer(1.0/30, self.process_callback)  # 30Hz
+        return True
 
     def stop_serial_threads(self):
         """停止串口线程，在 destroy_node 时调用"""
