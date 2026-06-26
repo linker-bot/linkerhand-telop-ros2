@@ -31,6 +31,7 @@ class TestRobotName:
         assert RobotName.l20.value is not None
         assert RobotName.o20.value is not None
         assert RobotName.o30.value is not None
+        assert RobotName.o30i.value is not None
 
     def test_robot_names_list(self):
         from linkerhand_retarget.linkerhand.constants import ROBOT_NAMES
@@ -74,6 +75,7 @@ class TestRobotNameMap:
         assert ROBOT_NAME_MAP[RobotName.l25] == "linker_hand_l25"
         assert ROBOT_NAME_MAP[RobotName.o20] == "linker_hand_o20"
         assert ROBOT_NAME_MAP[RobotName.o30] == "linker_hand_o30"
+        assert ROBOT_NAME_MAP[RobotName.o30i] == "linker_hand_o30i"
 
     def test_robot_len_map(self):
         assert ROBOT_LEN_MAP[RobotName.o7] == 7
@@ -82,8 +84,9 @@ class TestRobotNameMap:
         assert ROBOT_LEN_MAP[RobotName.l25] == 20
         assert ROBOT_LEN_MAP[RobotName.o20] == 20
         assert ROBOT_LEN_MAP[RobotName.o30] == 20
+        assert ROBOT_LEN_MAP[RobotName.o30i] == 20
 
-    @pytest.mark.parametrize("robot_name", ["o20", "o30"])
+    @pytest.mark.parametrize("robot_name", ["o20", "o30", "o30i"])
     def test_independent_20_dof_model_runtime_assets(self, robot_name):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         hand_config_path = package_dir / "config" / "hand_config.yml"
@@ -104,6 +107,33 @@ class TestRobotNameMap:
             assert hand_config[f"commandupper_{side}_{robot_name}"]
             assert hand_config[f"commandsourcedataindex_{side}_{robot_name}"]
             assert hand_config[f"urdfdataindex_{side}_{robot_name}"]
+
+    def test_o30i_hand_config_uses_20_dof_urdf_and_g20_motor_template(self):
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        hand_config_path = package_dir / "config" / "hand_config.yml"
+        hand_config = yaml.safe_load(hand_config_path.read_text())
+
+        for side in ("right", "left"):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"o30i_{side}"
+                / f"linkerhand_o30i_{side}.urdf"
+            )
+            movable_joints = [
+                joint
+                for joint in ET.parse(urdf_path).getroot().findall("joint")
+                if joint.attrib.get("type") != "fixed"
+            ]
+
+            assert len(movable_joints) == 20
+            assert hand_config[f"commandlower_{side}_o30i"] == hand_config[f"commandlower_{side}_g20"]
+            assert hand_config[f"commandupper_{side}_o30i"] == hand_config[f"commandupper_{side}_g20"]
+            assert hand_config[f"commandsourcedataindex_{side}_o30i"] == hand_config[f"commandsourcedataindex_{side}_g20"]
+            assert len(hand_config[f"urdfdataindex_{side}_o30i"]) == 20
 
     def test_o20_motor_commands_open_to_fist_direction(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"

@@ -19,9 +19,13 @@ system:
   motion_type: linkermcg
 
 udp:
-  ip: "0.0.0.0"
-  port: 8888
+  ip: "<target-ip>"
+  port: 9011
 ```
+
+`udp.ip` must be the target host address that receives the UDP stream. Do not use `0.0.0.0`.
+
+**Important:** enable both `debug.joint_motor_debug_l` and `debug.joint_motor_debug_r` to print UDP data in the debug output.
 
 ### 2. Launch
 
@@ -60,3 +64,4 @@ motion/linkermcg/
 
 1. Ensure UDP port is not occupied
 2. Glove and host must be on the same network
+3. Enable both `debug.joint_motor_debug_l` and `debug.joint_motor_debug_r` to show the UDP data in the debug output

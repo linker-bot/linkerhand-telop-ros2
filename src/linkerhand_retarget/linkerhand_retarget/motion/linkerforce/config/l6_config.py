@@ -20,8 +20,8 @@ FINGER_CONFIGS = {
         'name': '拇指弯曲',
         'joints': [2, 3, 4],
         'weights': {
-            'v1': [0.2, 0, 0.8],
-            'v2': [0.6, 0, 0.4]
+            'v1': [0, 0, 1],
+            'v2': [0, 0, 1]
         },
         'robot_idx': 1,
         'type': 'thumb',
@@ -192,7 +192,7 @@ ROBOT_FIST_RIGHT = [
 MOTOR_CONSTRAINTS = {
     'left': [
         {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指弯曲
-        {'min': 15, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
+        {'min': 0, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 2: 食指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 3: 中指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 4: 无名指
@@ -200,7 +200,7 @@ MOTOR_CONSTRAINTS = {
     ],
     'right': [
         {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指弯曲
-        {'min': 18, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
+        {'min': 0, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 2: 食指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 3: 中指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 4: 无名指

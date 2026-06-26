@@ -1244,8 +1244,12 @@ class Retarget():
             self.node.get_logger().error("没有有效的标定数据差异，取消保存")
             return False
 
+        robot_name_r = getattr(self, "robot_name_r", None)
+        robot_name_l = getattr(self, "robot_name_l", None)
         data = {
             "timestamp": datetime.now().isoformat(),
+            "robotname_r": getattr(robot_name_r, "name", str(robot_name_r)),
+            "robotname_l": getattr(robot_name_l, "name", str(robot_name_l)),
             "jointangleoriginal_r": self.righthand.calibrationoriginal,
             "jointangleoriginal_l": self.lefthand.calibrationoriginal,
             "jointanglefist_r": self.righthand.calibrationfistpose,
@@ -1327,6 +1331,28 @@ class Retarget():
                 self.node.get_logger().warn("标定数据已超过30天有效期，建议重新标定...")
         except:
             pass
+
+        robot_name_r = getattr(self, "robot_name_r", None)
+        robot_name_l = getattr(self, "robot_name_l", None)
+        current_robot_r = getattr(robot_name_r, "name", str(robot_name_r)).lower()
+        current_robot_l = getattr(robot_name_l, "name", str(robot_name_l)).lower()
+        saved_robot_r = str(data.get("robotname_r", "") or "").strip().lower()
+        saved_robot_l = str(data.get("robotname_l", "") or "").strip().lower()
+
+        if not from_sample:
+            if not saved_robot_r or not saved_robot_l:
+                self.node.get_logger().warning("标定缓存缺少机器人型号信息，忽略旧缓存并重新标定")
+                return False
+            if saved_robot_r != current_robot_r or saved_robot_l != current_robot_l:
+                self.node.get_logger().warning(
+                    "标定缓存型号不匹配，忽略旧缓存并重新标定: "
+                    f"tmp=({saved_robot_r}, {saved_robot_l}), "
+                    f"current=({current_robot_r}, {current_robot_l})"
+                )
+                return False
+        else:
+            data["robotname_r"] = getattr(robot_name_r, "name", str(robot_name_r))
+            data["robotname_l"] = getattr(robot_name_l, "name", str(robot_name_l))
 
         self.righthand.calibrationoriginal = data.get('jointangleoriginal_r')
         self.lefthand.calibrationoriginal = data.get('jointangleoriginal_l')

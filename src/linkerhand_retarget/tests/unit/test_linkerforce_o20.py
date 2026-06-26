@@ -16,6 +16,7 @@ from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o20 import (
     RightHand,
     _map_o20_qpos_to_motor,
 )
+from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
 from linkerhand_retarget.mujoco_display import (
     extract_mujoco_joint_positions,
     get_urdf_movable_joint_names,
@@ -89,6 +90,12 @@ def test_o20_right_thumb_cmc_yaw_reaches_opose_angle():
     hand.joint_update(hand.calibrationopose)
 
     assert hand.g_jointpositions_arc[1] == pytest.approx(ROBOT_OPOSE_RIGHT[1])
+
+
+def test_o20_uses_dynamic_weight_multi_state_mapper_backend():
+    hand = RightHand(FakeHandCore())
+
+    assert isinstance(hand.multi_state_mapper, DynamicWeightMultiStateLinearMapper)
 
 
 def test_o20_right_thumb_cmc_yaw_arc_is_smoothed():
@@ -596,12 +603,12 @@ def test_o20_right_thumb_roll_maps_runtime_raw_direction_to_open_and_fist():
     hand.initialize_mapper()
 
     live_open = list(hand.calibrationoriginal)
-    live_open[1] = 4.172578477966643
+    live_open[1] = hand.calibrationoriginal[1] + 0.1
     hand.joint_update(live_open)
     assert hand.g_jointpositions_arc[0] == pytest.approx(ROBOT_ORIGINAL_RIGHT[0])
 
-    live_fist = list(hand.calibrationoriginal)
-    live_fist[1] = 5.180927965710036
+    live_fist = list(hand.calibrationfistpose)
+    live_fist[1] = hand.calibrationfistpose[1] - 0.1
     hand.joint_update(live_fist)
     assert hand.g_jointpositions_arc[0] == pytest.approx(ROBOT_FIST_RIGHT[0])
 

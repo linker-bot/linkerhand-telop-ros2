@@ -156,3 +156,8 @@ class TestMultiStateLinearMapperEdgeCases:
         mapper.add_state('fist', [1.0] * 21, [1.0] * 6)
         
         assert len(mapper.glove_states) == 3
+
+    def test_normalize_weights_accepts_python_lists(self):
+        mapper = MultiStateLinearMapper(FINGER_CONFIGS_TEST, MAPPING_ORDER_TEST)
+
+        assert mapper._normalize_weights([1.0, 0.0, 0.0]) == [1.0, 0.0, 0.0]

@@ -10,16 +10,6 @@ from ..config.g20_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
 
-G20_MUJOCO_JOINT_ARC_INDICES = (
-    0, 1, 2, 3, 3,
-    5, 6, 7, 7,
-    9, 10, 11, 11,
-    13, 14, 15, 15,
-    17, 18, 19, 19,
-)
-G20_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(G20_MUJOCO_JOINT_ARC_INDICES)
-
-
 def _resolve_version_config(configs: dict, version: str) -> dict:
     """
     解析版本配置，将字典格式的 weights/reverse_motion 转换为具体值
@@ -40,8 +30,6 @@ class RightHand:
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
-        self.mujoco_joint_arc_indices = G20_MUJOCO_JOINT_ARC_INDICES
-        self.mujoco_joint_arc_signs = G20_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None    # 五指张开标定值 (对应255)
@@ -294,8 +282,6 @@ class LeftHand:
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
-        self.mujoco_joint_arc_indices = G20_MUJOCO_JOINT_ARC_INDICES
-        self.mujoco_joint_arc_signs = G20_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None

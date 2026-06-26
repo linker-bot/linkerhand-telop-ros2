@@ -9,6 +9,7 @@ from linkerhand_retarget.motion.linkerforce.hand import (
     linkerforce_l20,
     linkerforce_l6,
     linkerforce_o20,
+    linkerforce_o30i,
     linkerforce_o6,
 )
 
@@ -214,6 +215,53 @@ class FakeHandCore:
             },
         ),
         (
+            linkerforce_o30i.RightHand,
+            (
+                "thumb_cmc_roll",
+                "thumb_cmc_yaw",
+                "thumb_mcp",
+                "thumb_dip",
+                "index_mcp_roll",
+                "index_mcp_pitch",
+                "index_pip",
+                "index_dip",
+                "middle_mcp_roll",
+                "middle_mcp_pitch",
+                "middle_pip",
+                "middle_dip",
+                "ring_mcp_roll",
+                "ring_mcp_pitch",
+                "ring_pip",
+                "ring_dip",
+                "pinky_mcp_roll",
+                "pinky_mcp_pitch",
+                "pinky_pip",
+                "pinky_dip",
+            ),
+            {
+                "thumb_cmc_roll": 0.0,
+                "thumb_cmc_yaw": 1.0,
+                "thumb_mcp": 2.0,
+                "thumb_dip": 3.0,
+                "index_mcp_roll": 4.0,
+                "index_mcp_pitch": 5.0,
+                "index_pip": 6.0,
+                "index_dip": 6.0,
+                "middle_mcp_roll": 8.0,
+                "middle_mcp_pitch": 9.0,
+                "middle_pip": 10.0,
+                "middle_dip": 10.0,
+                "ring_mcp_roll": 12.0,
+                "ring_mcp_pitch": 13.0,
+                "ring_pip": 14.0,
+                "ring_dip": 14.0,
+                "pinky_mcp_roll": 16.0,
+                "pinky_mcp_pitch": 17.0,
+                "pinky_pip": 18.0,
+                "pinky_dip": 18.0,
+            },
+        ),
+        (
             linkerforce_l20.RightHand,
             (
                 "thumb_cmc_roll",
@@ -303,6 +351,88 @@ def test_g20_l20_mujoco_display_routes_passive_distal_joints():
         assert positions["joint_12"] == 11.0
         assert positions["joint_16"] == 15.0
         assert positions["joint_20"] == 19.0
+
+
+def test_o30i_mujoco_display_routes_passive_distal_joints():
+    joint_names = tuple(f"joint_{index}" for index in range(20))
+
+    for hand in (
+        linkerforce_o30i.RightHand(FakeHandCore()),
+        linkerforce_o30i.LeftHand(FakeHandCore()),
+    ):
+        hand.g_jointpositions_arc = [float(index) for index in range(20)]
+
+        positions = extract_mujoco_joint_positions(
+            None,
+            "right",
+            joint_names,
+            hand_model=hand,
+        )
+
+        assert positions["joint_7"] == 6.0
+        assert positions["joint_11"] == 10.0
+        assert positions["joint_15"] == 14.0
+        assert positions["joint_19"] == 18.0
+
+
+def test_o30i_left_mujoco_display_keeps_thumb_cmc_yaw_direction():
+    joint_names = ("thumb_cmc_roll", "thumb_cmc_yaw")
+    hand = linkerforce_o30i.LeftHand(FakeHandCore())
+    hand.g_jointpositions_arc[1] = 1.2
+
+    positions = extract_mujoco_joint_positions(
+        None,
+        "left",
+        joint_names,
+        hand_model=hand,
+    )
+
+    assert positions["thumb_cmc_yaw"] == pytest.approx(1.2)
+
+
+def test_o30i_right_mujoco_display_keeps_thumb_cmc_roll_and_yaw_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+        ROBOT_FIST_RIGHT,
+        ROBOT_OPOSE_RIGHT,
+        ROBOT_ORIGINAL_RIGHT,
+    )
+
+    joint_names = ("thumb_cmc_roll", "thumb_cmc_yaw")
+    hand = linkerforce_o30i.RightHand(FakeHandCore())
+
+    hand.g_jointpositions_arc[0] = ROBOT_ORIGINAL_RIGHT[0]
+    hand.g_jointpositions_arc[1] = ROBOT_ORIGINAL_RIGHT[1]
+    open_positions = extract_mujoco_joint_positions(
+        None,
+        "right",
+        joint_names,
+        hand_model=hand,
+    )
+
+    hand.g_jointpositions_arc[0] = ROBOT_OPOSE_RIGHT[0]
+    hand.g_jointpositions_arc[1] = ROBOT_OPOSE_RIGHT[1]
+    opose_positions = extract_mujoco_joint_positions(
+        None,
+        "right",
+        joint_names,
+        hand_model=hand,
+    )
+
+    hand.g_jointpositions_arc[0] = ROBOT_FIST_RIGHT[0]
+    hand.g_jointpositions_arc[1] = ROBOT_FIST_RIGHT[1]
+    fist_positions = extract_mujoco_joint_positions(
+        None,
+        "right",
+        joint_names,
+        hand_model=hand,
+    )
+
+    assert open_positions["thumb_cmc_roll"] == pytest.approx(ROBOT_ORIGINAL_RIGHT[0])
+    assert open_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_ORIGINAL_RIGHT[1])
+    assert opose_positions["thumb_cmc_roll"] == pytest.approx(ROBOT_OPOSE_RIGHT[0])
+    assert opose_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_OPOSE_RIGHT[1])
+    assert fist_positions["thumb_cmc_roll"] == pytest.approx(ROBOT_FIST_RIGHT[0])
+    assert fist_positions["thumb_cmc_yaw"] == pytest.approx(ROBOT_FIST_RIGHT[1])
 
 
 def test_l20_left_uses_same_order_with_numbered_urdf_joint_names():

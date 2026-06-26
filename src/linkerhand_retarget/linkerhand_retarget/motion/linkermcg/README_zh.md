@@ -19,9 +19,13 @@ system:
   motion_type: linkermcg
 
 udp:
-  ip: "0.0.0.0"
-  port: 8888
+  ip: "<目标地址>"
+  port: 9011
 ```
+
+`udp.ip` 必须填写接收 UDP 数据的目标主机地址，不要使用 `0.0.0.0`。
+
+**重要：** 必须同时打开 `debug.joint_motor_debug_l` 和 `debug.joint_motor_debug_r`，调试输出中才会打印 UDP 数据。
 
 ### 2. 运行
 
@@ -60,3 +64,4 @@ motion/linkermcg/
 
 1. 确保 UDP 端口未被占用
 2. 手套与主机需在同一网络
+3. 只有同时打开 `debug.joint_motor_debug_l` 和 `debug.joint_motor_debug_r`，才会在调试输出中显示来自 UDP 的数据

@@ -1,17 +1,18 @@
-# Version Notes
+# 版本说明
 
-## v2.12.5
+## v2.12.6
 
-- Added independent O20 and O30 robot hand model registration, runtime routing, hand wrappers, and URDF assets.
-- Added O20-specific LinkerFFG mapping: O20 open maps to motor `0`, fist maps to motor `255`, and thumb opose output is calibrated separately from URDF pose targets.
-- Preserved calibration anchor accuracy by returning exact robot URDF targets when glove input matches `original`, `opose`, or `fist` calibration states.
-- Updated ROS2 documentation and LinkerFFG module documentation with O20/O30 support notes.
-- Added regression coverage for O20/O30 assets, O20 motor direction, O20 thumb opose output, and calibration anchor behavior.
+- 新增 O20 和 O30 机械手型号注册、运行时路由、手型包装器和 URDF 资源。
+- 新增 O20 专用 LinkerFFG 映射：O20 张手映射到电机 `0`，握拳映射到 `255`，拇指 opose 输出单独校准，不再直接等同于 URDF 姿态目标。
+- 当手套输入匹配 `original`、`opose` 或 `fist` 标定状态时，直接返回对应机械手的精确 URDF 目标，保留标定锚点精度。
+- 更新 ROS2 文档和 LinkerFFG 模块文档，补充 O20/O30 支持说明。
+- 为 O20/O30 资源、O20 电机方向、O20 拇指 opose 输出以及标定锚点行为增加回归测试覆盖。
+- 本次新增：启用握拳采集时，LinkerFFG 自动标定顺序调整为 `fist -> opose -> open`；禁用握拳采集时，顺序调整为 `opose -> open`。
 
 ## v2.12.4
 
-- Standalone ROS2 repository split from the mixed workspace.
-- Root documentation simplified to ROS2-only build and run instructions.
-- Standardized all release-facing version references to `2.12.4`.
-- Removed launch-install guidance in favor of `ros2 run`.
-- Kept subtree history for the ROS2 package.
+- 从混合工作区中拆分为独立 ROS2 仓库。
+- 根目录文档简化为仅面向 ROS2 的构建和运行说明。
+- 统一所有对外版本号引用为 `2.12.4`。
+- 移除 launch 安装说明，改为 `ros2 run`。
+- 保留 ROS2 包的子树历史。

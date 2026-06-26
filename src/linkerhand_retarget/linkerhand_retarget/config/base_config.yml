@@ -54,8 +54,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: o20
-  robotname_r: o20
+  robotname_l: o30i
+  robotname_r: o30i
   sapientype: left
   usecan: false
   usegui: false

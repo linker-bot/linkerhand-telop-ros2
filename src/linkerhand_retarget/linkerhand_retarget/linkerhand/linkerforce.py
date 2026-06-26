@@ -490,6 +490,7 @@ class ForceSerialReader:
         self.gettype = gettype
         self.isdebug = isdebug
         self.connflag = False
+        self.position_frame_count = 0
         self.version: Optional[str] = None
         self.handtype: Optional[HandType] = None
 
@@ -679,6 +680,8 @@ class ForceSerialReader:
                 self.handtype = result['raw_handtype']
             elif 'handtype' in result:
                 self.handtype = result['handtype']
+            if 'poslist' in result:
+                self.position_frame_count += 1
             if 'force_response' in result and self.serial_port:
                 self.serial_port.write(self.pack_A7_data(self.forcelist))
 

@@ -439,10 +439,14 @@ class HandRetargetNode(Node):
             )
         if self.retarget is None:
             self.get_logger().error("未正确创建应用实例")
+            return False
         else:
             print("启动应用实例")
-            self.retarget.process()
+            started = self.retarget.process()
+            if not started:
+                return False
             self._start_mujoco_display_if_enabled()
+            return True
 
 def main(args=None):
     rclpy.init(args=args)
@@ -452,10 +456,10 @@ def main(args=None):
         signal.signal(signal.SIGINT, signal_handler)
         node = HandRetargetNode()
         executor = MultiThreadedExecutor()
-        node.retargetrun()
-        
-        # Keep the node alive
-        rclpy.spin(node, executor)
+        started = node.retargetrun()
+        if started:
+            # Keep the node alive
+            rclpy.spin(node, executor)
     except KeyboardInterrupt:
         if node is not None:
             node.get_logger().info("收到终止信号")

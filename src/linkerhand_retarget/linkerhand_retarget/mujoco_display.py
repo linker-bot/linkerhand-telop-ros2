@@ -57,6 +57,9 @@ def _derive_urdf_path(package_dir: Path, hand: str, robot_name_r, robot_name_l) 
 
 def _normalize_auto_hands(baseconfig: Mapping, loaded_hands: Optional[Iterable[str]]) -> Tuple[str, ...]:
     if loaded_hands is not None:
+        loaded_hands = tuple(loaded_hands)
+        if not loaded_hands:
+            return ()
         normalized = tuple(
             hand
             for hand in ("right", "left")
@@ -219,6 +222,15 @@ def detect_loaded_hands(retarget) -> Optional[Tuple[str, ...]]:
     )
 
     for reader in readers:
+        if reader is None:
+            continue
+        if not bool(getattr(reader, "connflag", False)):
+            continue
+        if int(getattr(reader, "position_frame_count", 0) or 0) <= 0:
+            continue
+        serial_port = getattr(reader, "serial_port", None)
+        if serial_port is not None and not bool(getattr(serial_port, "is_open", False)):
+            continue
         handtype = str(getattr(reader, "handtype", "") or "").strip().lower()
         if handtype == "right" and "right" not in hands:
             hands.append("right")
@@ -227,7 +239,7 @@ def detect_loaded_hands(retarget) -> Optional[Tuple[str, ...]]:
 
     if hands:
         return tuple(hands)
-    return None
+    return ()
 
 
 def collect_mujoco_urdf_assets(model_path: Path) -> Mapping[str, bytes]:
@@ -358,6 +370,118 @@ def _apply_arc_remap(value: float, remap) -> float:
     return min(points, key=lambda point: abs(value - point[0]))[1]
 
 
+def _infer_six_motor_arc_index(joint_name: str) -> Optional[int]:
+    name = joint_name.lower()
+    if "thumb" in name:
+        if "roll" in name or "yaw" in name:
+            return 1
+        return 0
+    if "index" in name:
+        return 2
+    if "middle" in name:
+        return 3
+    if "ring" in name:
+        return 4
+    if "pinky" in name or "little" in name:
+        return 5
+    return None
+
+
+def _infer_ten_motor_arc_index(joint_name: str) -> Optional[int]:
+    name = joint_name.lower()
+    if "thumb" in name:
+        if "roll" in name:
+            return 9
+        if "yaw" in name:
+            return 1
+        return 0
+    if "index" in name:
+        return 6 if "roll" in name else 2
+    if "middle" in name:
+        return 3
+    if "ring" in name:
+        return 7 if "roll" in name else 4
+    if "pinky" in name or "little" in name:
+        return 8 if "roll" in name else 5
+    return None
+
+
+def _infer_twenty_motor_arc_index(joint_name: str, position: int, joint_count: int) -> Optional[int]:
+    by_position = (
+        0, 1, 2, 3, 3,
+        5, 6, 7, 7,
+        9, 10, 11, 11,
+        13, 14, 15, 15,
+        17, 18, 19, 19,
+    )
+    if joint_count == len(by_position) and position < len(by_position):
+        return by_position[position]
+
+    name = joint_name.lower()
+    if "thumb" in name:
+        if "joint0" in name or "roll" in name:
+            return 0
+        if "joint1" in name or "yaw" in name:
+            return 1
+        if "joint2" in name or "pitch" in name:
+            return 2
+        return 3
+    if "index" in name:
+        if "joint0" in name or "roll" in name:
+            return 5
+        if "joint1" in name or "pitch" in name:
+            return 6
+        return 7
+    if "middle" in name:
+        if "joint0" in name or "roll" in name:
+            return 9
+        if "joint1" in name or "pitch" in name:
+            return 10
+        return 11
+    if "ring" in name:
+        if "joint0" in name or "roll" in name:
+            return 13
+        if "joint1" in name or "pitch" in name:
+            return 14
+        return 15
+    if "pinky" in name or "little" in name:
+        if "joint0" in name or "roll" in name:
+            return 17
+        if "joint1" in name or "pitch" in name:
+            return 18
+        return 19
+    return None
+
+
+def _infer_mujoco_joint_positions_from_arcs(
+    arc_values: Sequence[float],
+    movable_joint_names: Sequence[str],
+) -> Mapping[str, float]:
+    arc_count = len(arc_values)
+    joint_count = len(movable_joint_names)
+    if arc_count == joint_count:
+        return {
+            joint_name: float(value)
+            for joint_name, value in zip(movable_joint_names, arc_values)
+        }
+
+    positions = {}
+    for position, joint_name in enumerate(movable_joint_names):
+        arc_idx = None
+        if arc_count == 6:
+            arc_idx = _infer_six_motor_arc_index(joint_name)
+        elif arc_count == 10:
+            arc_idx = _infer_ten_motor_arc_index(joint_name)
+        elif arc_count == 20:
+            arc_idx = _infer_twenty_motor_arc_index(joint_name, position, joint_count)
+
+        if arc_idx is None or arc_idx >= arc_count:
+            continue
+        positions[joint_name] = float(arc_values[arc_idx])
+
+    return positions
+
+
 def extract_mujoco_joint_positions(
     handcore,
     hand: str,
@@ -392,11 +516,10 @@ def extract_mujoco_joint_positions(
                 positions[joint_name] = value
             if positions:
                 return positions
-        elif len(arc_values) == len(movable_joint_names):
-            return {
-                joint_name: float(value)
-                for joint_name, value in zip(movable_joint_names, arc_values)
-            }
+
+        positions = _infer_mujoco_joint_positions_from_arcs(arc_values, movable_joint_names)
+        if positions:
+            return positions
 
     if hand == "left":
         qpos = getattr(handcore, "last_qpos_l", None)
@@ -526,7 +649,7 @@ def build_mujoco_display_plan(
     urdf_paths: Optional[Mapping[str, Path]] = None,
     module_available: Callable[[str], bool] = _module_available,
 ) -> MujocoDisplayPlan:
-    return build_mujoco_display_plans(
+    plans = build_mujoco_display_plans(
         baseconfig,
         package_dir,
         robot_name_r,
@@ -534,7 +657,14 @@ def build_mujoco_display_plan(
         loaded_hands=loaded_hands,
         urdf_paths=urdf_paths,
         module_available=module_available,
-    )[0]
+    )
+    if plans:
+        return plans[0]
+
+    mujoco_config = baseconfig.get("mujoco", {}) if isinstance(baseconfig, Mapping) else {}
+    enabled = _as_bool(mujoco_config.get("enabled", False))
+    fps = int(mujoco_config.get("fps", 30) or 30)
+    return MujocoDisplayPlan(False, enabled, "right", None, fps, ())
 
 
 class MujocoDisplay:

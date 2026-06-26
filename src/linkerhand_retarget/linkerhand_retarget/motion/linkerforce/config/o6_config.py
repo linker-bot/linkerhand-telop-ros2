@@ -14,7 +14,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.2,
-            'extended_exp_factor': 5
+            'extended_exp_factor': 20
         }
     },
     'thumb_root_flexion': {
@@ -34,7 +34,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
-            'extended_exp_factor': 5
+            'extended_exp_factor': 10
         }
     },
     'index_root_flexion': {
@@ -54,7 +54,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.0,
-            'extended_exp_factor': 5
+            'extended_exp_factor': 10
         }
     },
     'middle_root_flexion': {
@@ -127,13 +127,13 @@ MAPPING_ORDER = [
 MULTI_SEGMENT_CONFIG = {
     'states': [
         'original', 
-        'opose',
-        # 'fist'
+        # 'opose',
+        'fist'
         ],
     'state_names': {
         'original': '张手',
-        'opose': 'O手势',
-        # 'fist': '握拳'
+        # 'opose': 'O手势',
+        'fist': '握拳'
     }
 }
 MULTI_SEGMENT_CONFIG_FROZEN = tuple(MULTI_SEGMENT_CONFIG['states'])
@@ -155,11 +155,11 @@ ROBOT_ORIGINAL_RIGHT = [
 ]
 
 ROBOT_FIST_LEFT = [
-    1.54, 0.52, 0.96, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4
+    1.36, 0.52, 0.96, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4
 ]
 
 ROBOT_FIST_RIGHT = [
-    1.54, 0.52, 0.96, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4
+    1.36, 0.52, 0.96, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4, 1.57, 1.4
 ]
 
 PLOTGUI_ROBOT_ID = [
@@ -169,16 +169,16 @@ PLOTGUI_ROBOT_ID = [
 # 电机输出约束配置 (6电机)
 MOTOR_CONSTRAINTS = {
     'left': [
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指侧摆
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 1: 拇指根部
+        {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指根部
+        {'min': 48, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 2: 食指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 3: 中指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 4: 无名指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 5: 小指
     ],
     'right': [
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指侧摆
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 1: 拇指根部
+        {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指根部
+        {'min': 48, 'max': 255, 'enabled': True},   # motor 1: 拇指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 2: 食指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 3: 中指
         {'min': 0, 'max': 255, 'enabled': False},   # motor 4: 无名指

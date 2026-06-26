@@ -211,6 +211,7 @@ def test_save_to_tmp_accepts_right_only_calibration_without_left_reader(monkeypa
     install_ros_stubs(monkeypatch)
 
     from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand.constants import RobotName
 
     logger = FakeLogger()
     retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
@@ -219,6 +220,8 @@ def test_save_to_tmp_accepts_right_only_calibration_without_left_reader(monkeypa
     retarget.force_reader_right = SimpleNamespace(handtype="Right")
     retarget.lefthand = make_hand()
     retarget.righthand = make_hand()
+    retarget.robot_name_r = RobotName.o20
+    retarget.robot_name_l = RobotName.o20
     retarget.righthand.calibrationoriginal = [0.0, 0.0, 0.0, 0.0]
     retarget.righthand.calibrationopose = [1.0, 1.0, 1.0, 1.0]
     retarget.righthand.calibrationfistpose = [2.0, 2.0, 2.0, 2.0]
@@ -235,6 +238,78 @@ def test_save_to_tmp_accepts_right_only_calibration_without_left_reader(monkeypa
     assert data["jointangleoriginal_l"] is None
     assert data["jointangleopose_l"] is None
     assert data["jointanglefist_l"] is None
+
+
+def test_load_from_tmp_rejects_mismatched_robot_models(monkeypatch, tmp_path):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand.constants import RobotName
+
+    logger = FakeLogger()
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: logger)
+    retarget.force_reader_left = None
+    retarget.force_reader_right = None
+    retarget.lefthand = make_hand()
+    retarget.righthand = make_hand()
+    retarget.robot_name_r = RobotName.o30i
+    retarget.robot_name_l = RobotName.o30i
+
+    tmp_file = tmp_path / "jointangle_data.tmp"
+    monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
+    tmp_file.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-06-24T17:51:31.146022",
+                "robotname_r": "o20",
+                "robotname_l": "o20",
+                "jointangleoriginal_r": [1.0, 2.0, 3.0],
+                "jointangleopose_r": [4.0, 5.0, 6.0],
+                "jointanglefist_r": [7.0, 8.0, 9.0],
+                "jointangleoriginal_l": [1.0, 2.0, 3.0],
+                "jointangleopose_l": [4.0, 5.0, 6.0],
+                "jointanglefist_l": [7.0, 8.0, 9.0],
+            },
+            indent=2,
+        )
+    )
+
+    assert retarget._load_from_tmp() is False
+    assert retarget.righthand.calibrationoriginal is None
+    assert retarget.lefthand.calibrationoriginal is None
+
+
+def test_save_to_tmp_persists_robot_models(monkeypatch, tmp_path):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand.constants import RobotName
+
+    logger = FakeLogger()
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: logger)
+    retarget.force_reader_left = SimpleNamespace(handtype="Left")
+    retarget.force_reader_right = SimpleNamespace(handtype="Right")
+    retarget.lefthand = make_hand()
+    retarget.righthand = make_hand()
+    retarget.lefthand.calibrationoriginal = [1.0, 2.0]
+    retarget.lefthand.calibrationopose = [3.0, 4.0]
+    retarget.lefthand.calibrationfistpose = [5.0, 6.0]
+    retarget.righthand.calibrationoriginal = [7.0, 8.0]
+    retarget.righthand.calibrationopose = [9.0, 10.0]
+    retarget.righthand.calibrationfistpose = [11.0, 12.0]
+    retarget.robot_name_l = RobotName.o20
+    retarget.robot_name_r = RobotName.o30i
+
+    tmp_file = tmp_path / "jointangle_data.tmp"
+    monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
+
+    assert retarget._save_to_tmp() is True
+
+    data = json.loads(tmp_file.read_text())
+    assert data["robotname_r"] == "o30i"
+    assert data["robotname_l"] == "o20"
 
 
 def test_process_stops_without_entering_spin_when_calibration_fails(monkeypatch):

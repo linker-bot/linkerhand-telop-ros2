@@ -29,8 +29,8 @@ FINGER_CONFIGS = {
         'name': '拇指侧摆',
         'joints': [0, 1, 2],
         'weights': {
-            'v1': [0.7, 0.3, 0],
-            'v2': [0.7, 0.3, 0]
+            'v1': [0, 1, 0],
+            'v2': [0, 1, 0]
         },
         'robot_idx': 1,
         'type': 'thumb',
@@ -77,7 +77,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1.2,
-            'extended_exp_factor': 30
+            'extended_exp_factor': 10
         }
     },
     # 拇指指尖弯曲3个关节的加权系数，人手的2/3/4序列，对应URDF的第4关节(下标3)
@@ -98,7 +98,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 50
+            'extended_exp_factor': 20
         }
     },
     # 食指ROLL旋转（侧摆）关节的加权系数，人手的5序列，对应URDF的第4关节(下标3)

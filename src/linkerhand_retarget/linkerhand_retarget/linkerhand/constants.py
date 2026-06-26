@@ -34,6 +34,7 @@ class RobotName(enum.Enum):
     l20lite = enum.auto()
     o20 = enum.auto()
     o30 = enum.auto()
+    o30i = enum.auto()
     l25 = enum.auto()
     g20 = enum.auto()
 
@@ -80,6 +81,7 @@ ROBOT_NAME_MAP = {
     RobotName.l20lite: "linker_hand_l20lite",
     RobotName.o20: "linker_hand_o20",
     RobotName.o30: "linker_hand_o30",
+    RobotName.o30i: "linker_hand_o30i",
     RobotName.l25: "linker_hand_l25",
     RobotName.g20: "linker_hand_g20",
 }
@@ -100,6 +102,7 @@ ROBOT_LEN_MAP ={
     RobotName.l20lite: 10,
     RobotName.o20: 20,
     RobotName.o30: 20,
+    RobotName.o30i: 20,
     RobotName.l25: 20,
     RobotName.g20: 20,
 }

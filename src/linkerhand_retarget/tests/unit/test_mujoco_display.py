@@ -4,6 +4,7 @@ import types
 from types import SimpleNamespace
 
 import pytest
+import serial.tools.list_ports
 
 from linkerhand_retarget.mujoco_display import (
     MujocoDisplay,
@@ -133,6 +134,30 @@ def test_mujoco_display_derives_urdf_path_from_selected_hand(tmp_path):
     assert plan.model_path == urdf_path
 
 
+def test_mujoco_display_derives_o30i_urdf_path_from_selected_hand(tmp_path):
+    package_dir = tmp_path / "linkerhand_retarget"
+    model_dir = package_dir / "assets" / "robots" / "hands" / "linker_hand" / "o30i_left"
+    model_dir.mkdir(parents=True)
+    urdf_path = model_dir / "linkerhand_o30i_left.urdf"
+    urdf_path.write_text("<robot/>", encoding="utf-8")
+
+    plan = build_mujoco_display_plan(
+        baseconfig={
+            "mujoco": {
+                "enabled": True,
+                "hand": "left",
+            }
+        },
+        package_dir=package_dir,
+        robot_name_r=SimpleNamespace(name="o30i"),
+        robot_name_l=SimpleNamespace(name="o30i"),
+        module_available=lambda _name: True,
+    )
+
+    assert plan.should_start is True
+    assert plan.model_path == urdf_path
+
+
 def test_mujoco_display_builds_two_plans_from_hands_list(tmp_path):
     right_urdf = tmp_path / "right.urdf"
     left_urdf = tmp_path / "left.urdf"
@@ -215,7 +240,12 @@ def test_mujoco_display_auto_hands_uses_single_enabled_output(tmp_path):
 
 def test_detect_loaded_hands_uses_linkerforce_readers():
     retarget = SimpleNamespace(
-        force_reader_left=SimpleNamespace(handtype="Left"),
+        force_reader_left=SimpleNamespace(
+            handtype="Left",
+            connflag=True,
+            position_frame_count=1,
+            serial_port=SimpleNamespace(is_open=True),
+        ),
         force_reader_right=SimpleNamespace(handtype=None),
     )
 
@@ -224,11 +254,114 @@ def test_detect_loaded_hands_uses_linkerforce_readers():
 
 def test_detect_loaded_hands_uses_handtype_when_reader_slot_is_swapped():
     retarget = SimpleNamespace(
-        force_reader_left=SimpleNamespace(handtype="Right"),
+        force_reader_left=SimpleNamespace(
+            handtype="Right",
+            connflag=True,
+            position_frame_count=1,
+            serial_port=SimpleNamespace(is_open=True),
+        ),
         force_reader_right=SimpleNamespace(handtype=None),
     )
 
     assert detect_loaded_hands(retarget) == ("right",)
+
+
+def test_detect_loaded_hands_returns_empty_tuple_when_no_glove_connected():
+    retarget = SimpleNamespace(
+        force_reader_left=None,
+        force_reader_right=None,
+    )
+
+    assert detect_loaded_hands(retarget) == ()
+
+
+def test_detect_loaded_hands_ignores_stale_handtype_without_active_connection():
+    retarget = SimpleNamespace(
+        force_reader_left=SimpleNamespace(
+            handtype="Left",
+            connflag=False,
+            serial_port=SimpleNamespace(is_open=False),
+        ),
+        force_reader_right=None,
+    )
+
+    assert detect_loaded_hands(retarget) == ()
+
+
+def test_detect_loaded_hands_ignores_reader_without_position_frames():
+    retarget = SimpleNamespace(
+        force_reader_left=SimpleNamespace(
+            handtype="Left",
+            connflag=True,
+            position_frame_count=0,
+            serial_port=SimpleNamespace(is_open=True),
+        ),
+        force_reader_right=None,
+    )
+
+    assert detect_loaded_hands(retarget) == ()
+
+
+def test_detect_loaded_hands_keeps_active_connected_reader_with_position_frames():
+    retarget = SimpleNamespace(
+        force_reader_left=SimpleNamespace(
+            handtype="Left",
+            connflag=True,
+            position_frame_count=1,
+            serial_port=SimpleNamespace(is_open=True),
+        ),
+        force_reader_right=None,
+    )
+
+    assert detect_loaded_hands(retarget) == ("left",)
+
+
+def test_mujoco_display_auto_hands_stays_off_when_no_glove_loaded(tmp_path):
+    right_urdf = tmp_path / "right.urdf"
+    left_urdf = tmp_path / "left.urdf"
+    right_urdf.write_text("<robot/>", encoding="utf-8")
+    left_urdf.write_text("<robot/>", encoding="utf-8")
+
+    plans = build_mujoco_display_plans(
+        baseconfig={
+            "system": {
+                "rightpub": True,
+                "leftpub": True,
+            },
+            "mujoco": {
+                "enabled": True,
+                "hands": "auto",
+            },
+        },
+        package_dir=tmp_path,
+        robot_name_r=SimpleNamespace(name="o20"),
+        robot_name_l=SimpleNamespace(name="o30"),
+        loaded_hands=(),
+        urdf_paths={"right": right_urdf, "left": left_urdf},
+        module_available=lambda _name: True,
+    )
+
+    assert plans == ()
+
+
+def test_mujoco_display_single_plan_stays_disabled_when_no_glove_loaded(tmp_path):
+    plan = build_mujoco_display_plan(
+        baseconfig={
+            "mujoco": {
+                "enabled": True,
+                "hands": "auto",
+            },
+        },
+        package_dir=tmp_path,
+        robot_name_r=SimpleNamespace(name="o20"),
+        robot_name_l=SimpleNamespace(name="o30"),
+        loaded_hands=(),
+        module_available=lambda _name: True,
+    )
+
+    assert plan.enabled is True
+    assert plan.should_start is False
+    assert plan.model_path is None
 
 
 def test_mujoco_display_auto_hands_uses_swapped_reader_handtype(tmp_path):
@@ -237,7 +370,12 @@ def test_mujoco_display_auto_hands_uses_swapped_reader_handtype(tmp_path):
     right_urdf.write_text("<robot/>", encoding="utf-8")
     left_urdf.write_text("<robot/>", encoding="utf-8")
     retarget = SimpleNamespace(
-        force_reader_left=SimpleNamespace(handtype="Right"),
+        force_reader_left=SimpleNamespace(
+            handtype="Right",
+            connflag=True,
+            position_frame_count=1,
+            serial_port=SimpleNamespace(is_open=True),
+        ),
         force_reader_right=SimpleNamespace(handtype=None),
     )
 
@@ -327,27 +465,35 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
     class FakeSerialPort:
         def __init__(self, reader):
             self.reader = reader
+            self.is_open = True
 
         def write(self, _data):
             if self.reader.detects_on_query:
                 self.reader.handtype = "Left"
                 self.reader.version = "1.2.3"
+                self.reader.connflag = True
+                self.reader.position_frame_count = 1
 
     class FakeForceSerialReader:
         def __init__(self, *_args, **_kwargs):
             self.detects_on_query = len(created_readers) == 0
             self.handtype = None
             self.version = None
+            self.connflag = False
+            self.position_frame_count = 0
             self.serial_port = FakeSerialPort(self)
             created_readers.append(self)
 
         def openserial(self, port, baudrate):
             self.port = port
             self.baudrate = baudrate
+            self.serial_port = FakeSerialPort(self)
             return True
 
         def start(self):
-            pass
+            if self.handtype:
+                self.connflag = True
+                self.position_frame_count = 1
 
         def stop(self):
             pass
@@ -397,6 +543,134 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
     assert retarget.force_reader_left.handtype == "Left"
     assert retarget.force_reader_left.version == "1.2.3"
     assert detect_loaded_hands(retarget) == ("left",)
+
+
+def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monkeypatch):
+    def install_ros_stubs():
+        rclpy = types.ModuleType("rclpy")
+        rclpy_node = types.ModuleType("rclpy.node")
+        rclpy_node.Node = type("Node", (), {})
+        sensor_msgs = types.ModuleType("sensor_msgs")
+        sensor_msgs_msg = types.ModuleType("sensor_msgs.msg")
+        sensor_msgs_msg.JointState = type("JointState", (), {})
+        std_msgs = types.ModuleType("std_msgs")
+        std_msgs_msg = types.ModuleType("std_msgs.msg")
+        for name in (
+            "String",
+            "Int32MultiArray",
+            "Header",
+            "Float32MultiArray",
+            "MultiArrayLayout",
+            "MultiArrayDimension",
+        ):
+            setattr(std_msgs_msg, name, type(name, (), {}))
+
+        monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+        monkeypatch.setitem(sys.modules, "rclpy.node", rclpy_node)
+        monkeypatch.setitem(sys.modules, "sensor_msgs", sensor_msgs)
+        monkeypatch.setitem(sys.modules, "sensor_msgs.msg", sensor_msgs_msg)
+        monkeypatch.setitem(sys.modules, "std_msgs", std_msgs)
+        monkeypatch.setitem(sys.modules, "std_msgs.msg", std_msgs_msg)
+
+    install_ros_stubs()
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+
+    created_readers = []
+
+    class FakeSerialPort:
+        def __init__(self, reader):
+            self.reader = reader
+
+        def write(self, _data):
+            if self.reader.detects_on_query:
+                self.reader.handtype = "Right"
+                self.reader.version = "2.1.5"
+
+    class FakeForceSerialReader:
+        def __init__(self, *_args, **_kwargs):
+            self.detects_on_query = len(created_readers) == 0
+            self.handtype = None
+            self.version = None
+            self.serial_port = FakeSerialPort(self)
+            created_readers.append(self)
+
+        def openserial(self, port, baudrate):
+            self.port = port
+            self.baudrate = baudrate
+            return port == "/dev/ttyUSB0"
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def pack_01_data(self):
+            return b"version-query"
+
+    class FakeLogger:
+        def info(self, _msg):
+            pass
+
+        def warn(self, _msg):
+            pass
+
+        def error(self, _msg):
+            pass
+
+        def debug(self, _msg):
+            pass
+
+    monkeypatch.setattr(retarget_module, "ForceSerialReader", FakeForceSerialReader)
+    monkeypatch.setattr(retarget_module.os.path, "exists", lambda path: path == "/dev/ttyUSB0")
+    monkeypatch.setattr(retarget_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        serial.tools.list_ports,
+        "comports",
+        lambda: [SimpleNamespace(device="/dev/ttyUSB0")],
+    )
+
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
+    retarget.baseconfig = {
+        "serial": {
+            "auto_scan": True,
+            "baudrates": [2000000],
+            "exclude_ports": [],
+            "left": {"port": "/dev/ttyUSB0", "baudrate": 2000000},
+            "right": {"port": "/dev/ttyUSB1", "baudrate": 2000000},
+        },
+        "calibration": {},
+    }
+    retarget.cmd_ports = None
+    retarget.cmd_baudrate = None
+    retarget.cmd_auto_scan = None
+    retarget.calibration = False
+    retarget.lefthand = SimpleNamespace(
+        set_glove_version=lambda _version: None,
+        initialize_mapper=lambda: None,
+    )
+    retarget.righthand = SimpleNamespace(
+        set_glove_version=lambda _version: None,
+        initialize_mapper=lambda: None,
+    )
+    retarget.leftport = None
+    retarget.leftbaudrate = None
+    retarget.rightport = None
+    retarget.rightbaudrate = None
+    retarget.force_reader_left = None
+    retarget.force_reader_right = None
+    retarget._save_serial_to_config = lambda _left_found, _right_found: None
+    retarget._load_from_tmp = lambda: True
+
+    retarget.linkerforce_init()
+
+    assert retarget.force_reader_left is None
+    assert retarget.force_reader_right is created_readers[1]
+    assert retarget.force_reader_right.handtype == "Right"
+    assert retarget.rightport == "/dev/ttyUSB0"
+    assert retarget.rightbaudrate == 2000000
 
 
 def test_mujoco_display_keeps_legacy_hand_config(tmp_path):

@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from linkerhand.handcore import HandCore
 from ..config.o20_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG, MOTOR_CONSTRAINTS
-from .simple_linear_mapper import SimpleLinearMapper
+from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
 
 O20_THUMB_MOTOR_CALIBRATION = {
     5: {"qpos_index": 16, "robot_idx": 0, "opose_motor": 165},
@@ -125,6 +125,128 @@ def _build_o20_mujoco_joint_arc_remaps(
             (upper, upper),
         )
     return tuple(remaps)
+
+
+class O20DynamicWeightMultiStateLinearMapper(DynamicWeightMultiStateLinearMapper):
+    def __init__(self, finger_configs, mapping_order, is_debug=False, filter_enabled=False):
+        super().__init__(finger_configs, mapping_order, is_debug=is_debug)
+        self.finger_configs = copy.deepcopy(finger_configs)
+        self.filter_enabled = filter_enabled
+        self.last_raw_glove = None
+        self.last_filtered_glove = None
+        self.last_fused_values = {}
+
+    def reset_filter(self, current=None):
+        if current is None:
+            initial_values = [0.0] * len(self.filters.filters)
+        else:
+            initial_values = np.array(current, dtype=float).tolist()
+
+        self.filters.reset(initial_values)
+        current_array = np.array(initial_values, dtype=float)
+        self.last_raw_glove = current_array.copy()
+        self.last_filtered_glove = current_array.copy()
+        self.raw_history.append(current_array.copy())
+        self.filtered_history.append(current_array.copy())
+        max_history = 100
+        if len(self.raw_history) > max_history:
+            self.raw_history = self.raw_history[-max_history:]
+            self.filtered_history = self.filtered_history[-max_history:]
+
+    def _fused_value(self, data, config):
+        weights = self._normalize_weights(config["weights"])
+        return self._calculate_fused_value(np.array(data, dtype=float), config["joints"], weights)
+
+    def _calculate_fused_value(self, data: np.ndarray, joints, weights) -> float:
+        weights = np.array(weights, dtype=float)
+        if len(weights) != len(joints):
+            raise ValueError("weights 长度必须和 joints 长度一致")
+        if abs(float(weights.sum())) > 1e-12:
+            weights = weights / weights.sum()
+        return float(sum(float(data[joint]) * weight for joint, weight in zip(joints, weights)))
+
+    @staticmethod
+    def _normalize_weights(weights):
+        values = np.array(weights, dtype=float)
+        total = float(values.sum())
+        if abs(total) < 1e-12:
+            return [0.0] * len(values)
+        return (values / total).tolist()
+
+    def map_glove_to_robot(self, source_current, use_filter=None):
+        source_current_array = np.array(source_current, dtype=float)
+        self.last_raw_glove = source_current_array.copy()
+        if len(source_current_array) > 1:
+            self.debug_value[3] = float(source_current_array[1])
+
+        for state_name, glove_state in self.glove_states.items():
+            if np.allclose(source_current_array, glove_state, rtol=0.0, atol=1e-9):
+                self.last_filtered_glove = source_current_array.copy()
+                if len(source_current_array) > 1:
+                    self.debug_value[4] = float(source_current_array[1])
+                return self.robot_states[state_name].copy()
+
+        filter_enabled = self.filter_enabled if use_filter is None else use_filter
+        if filter_enabled:
+            if self.last_filtered_glove is None:
+                self.reset_filter(source_current_array)
+                glove_current = source_current_array.copy()
+            else:
+                glove_current = np.array(self.filters.update(source_current_array.tolist()), dtype=float)
+            self.last_filtered_glove = glove_current.copy()
+        else:
+            glove_current = source_current_array.copy()
+            self.last_filtered_glove = glove_current.copy()
+
+        self.raw_history.append(source_current_array.copy())
+        self.filtered_history.append(np.array(glove_current, dtype=float).copy())
+        max_history = 100
+        if len(self.raw_history) > max_history:
+            self.raw_history = self.raw_history[-max_history:]
+            self.filtered_history = self.filtered_history[-max_history:]
+
+        if len(glove_current) > 1:
+            self.debug_value[4] = float(glove_current[1])
+
+        if isinstance(glove_current, np.ndarray):
+            glove_current = glove_current.tolist()
+        elif isinstance(glove_current, list):
+            glove_current = glove_current
+        else:
+            glove_current = list(glove_current)
+
+        if len(self.state_order) < 2:
+            raise ValueError("请至少设置两个状态")
+
+        if 'original' not in self.glove_states:
+            raise ValueError("必须包含 'original' 状态作为基准")
+
+        self.cached_mapped_values = {}
+        glove_current_arr = np.array(glove_current)
+        robot_angles = self.robot_states['original'].copy()
+
+        for config_name in self.mapping_order:
+            if config_name in self.dynamic_weight_configs:
+                trigger_finger = self.dynamic_weight_configs[config_name]['trigger_finger']
+                if trigger_finger not in self.cached_mapped_values:
+                    trigger_value = self._calculate_trigger_value(
+                        glove_current_arr, trigger_finger
+                    )
+                    self.cached_mapped_values[trigger_finger] = trigger_value
+
+        for config_name in self.mapping_order:
+            dynamic_config = self.dynamic_weight_configs.get(config_name)
+            config = self.finger_configs[config_name]
+            if dynamic_config:
+                angle = self._map_finger_dynamic_weight(
+                    glove_current_arr, config_name, dynamic_config, config
+                )
+            else:
+                angle = self._map_finger_multi_state(glove_current_arr, config)
+            robot_idx = self.finger_configs[config_name]['robot_idx']
+            robot_angles[robot_idx] = angle
+
+        return robot_angles
 
 
 def _clamp_robot_arc_values(values, joint_limits):
@@ -267,6 +389,26 @@ def _matches_calibration_pose(joint_arc, calibration_pose) -> bool:
     return bool(np.allclose(joint_arc, calibration_pose, rtol=0.0, atol=1e-9))
 
 
+def _map_config_from_calibration(mapper, config_name, current,
+                                 calibrationoriginal, calibrationopose, calibrationfistpose,
+                                 robot_original, robot_opose, robot_fist):
+    config = mapper.finger_configs.get(config_name)
+    if not config:
+        return None
+
+    robot_idx = config["robot_idx"]
+    current_value = mapper._fused_value(current, config)
+    return _map_piecewise_linear(
+        current_value,
+        mapper._fused_value(calibrationoriginal, config),
+        mapper._fused_value(calibrationopose, config),
+        mapper._fused_value(calibrationfistpose, config),
+        robot_original[robot_idx],
+        robot_opose[robot_idx],
+        robot_fist[robot_idx],
+    )
+
+
 class RightHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
@@ -318,7 +460,11 @@ class RightHand:
                 self.robot_fist,
             )
         )
-        self.multi_state_mapper = SimpleLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
+        self.multi_state_mapper = O20DynamicWeightMultiStateLinearMapper(
+            finger_configs,
+            MAPPING_ORDER,
+            is_debug=is_debug,
+        )
 
         self.motor_constraints = MOTOR_CONSTRAINTS['right']
 
@@ -384,9 +530,9 @@ class RightHand:
 
         return _map_piecewise_linear(
             value,
-            self.multi_state_mapper._fused_value(fist, config),
-            self.multi_state_mapper._fused_value(opose, config),
             self.multi_state_mapper._fused_value(original, config),
+            self.multi_state_mapper._fused_value(opose, config),
+            self.multi_state_mapper._fused_value(fist, config),
             self.robot_original[0],
             self.robot_opose[0],
             self.robot_fist[0],
@@ -522,6 +668,19 @@ class RightHand:
             thumb_cmc_yaw = self._map_thumb_cmc_yaw(filtered_joint_arc)
             if thumb_cmc_yaw is not None:
                 arc_value[1] = thumb_cmc_yaw
+            pinky_roll = _map_config_from_calibration(
+                self.multi_state_mapper,
+                "pinky_roll",
+                filtered_joint_arc,
+                self.calibrationoriginal,
+                self.calibrationopose,
+                self.calibrationfistpose,
+                self.robot_original,
+                self.robot_opose,
+                self.robot_fist,
+            )
+            if pinky_roll is not None:
+                arc_value[13] = pinky_roll
             arc_value = _clamp_robot_arc_values(arc_value, self.urdf_joint_limits)
 
             qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
@@ -731,7 +890,11 @@ class LeftHand:
                 self.robot_fist,
             )
         )
-        self.multi_state_mapper = SimpleLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
+        self.multi_state_mapper = O20DynamicWeightMultiStateLinearMapper(
+            finger_configs,
+            MAPPING_ORDER,
+            is_debug=is_debug,
+        )
 
         self.motor_constraints = MOTOR_CONSTRAINTS['left']
 
@@ -902,6 +1065,19 @@ class LeftHand:
             thumb_cmc_yaw = self._map_thumb_cmc_yaw(filtered_joint_arc)
             if thumb_cmc_yaw is not None:
                 arc_value[1] = thumb_cmc_yaw
+            pinky_roll = _map_config_from_calibration(
+                self.multi_state_mapper,
+                "pinky_roll",
+                filtered_joint_arc,
+                self.calibrationoriginal,
+                self.calibrationopose,
+                self.calibrationfistpose,
+                self.robot_original,
+                self.robot_opose,
+                self.robot_fist,
+            )
+            if pinky_roll is not None:
+                arc_value[13] = pinky_roll
             arc_value = _clamp_robot_arc_values(arc_value, self.urdf_joint_limits)
 
             qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
