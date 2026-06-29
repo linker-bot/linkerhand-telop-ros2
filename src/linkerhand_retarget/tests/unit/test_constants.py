@@ -108,7 +108,7 @@ class TestRobotNameMap:
             assert hand_config[f"commandsourcedataindex_{side}_{robot_name}"]
             assert hand_config[f"urdfdataindex_{side}_{robot_name}"]
 
-    def test_o30i_hand_config_uses_20_dof_urdf_and_g20_motor_template(self):
+    def test_o30i_hand_config_uses_20_dof_urdf_and_g20_source_template(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         hand_config_path = package_dir / "config" / "hand_config.yml"
         hand_config = yaml.safe_load(hand_config_path.read_text())
@@ -130,10 +130,26 @@ class TestRobotNameMap:
             ]
 
             assert len(movable_joints) == 20
-            assert hand_config[f"commandlower_{side}_o30i"] == hand_config[f"commandlower_{side}_g20"]
-            assert hand_config[f"commandupper_{side}_o30i"] == hand_config[f"commandupper_{side}_g20"]
             assert hand_config[f"commandsourcedataindex_{side}_o30i"] == hand_config[f"commandsourcedataindex_{side}_g20"]
             assert len(hand_config[f"urdfdataindex_{side}_o30i"]) == 20
+
+    def test_o30i_motor_commands_urdf_minimum_maps_to_motor_zero(self):
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        hand_config_path = package_dir / "config" / "hand_config.yml"
+        hand_config = yaml.safe_load(hand_config_path.read_text())
+
+        for side in ("right", "left"):
+            lower = hand_config[f"commandlower_{side}_o30i"]
+            upper = hand_config[f"commandupper_{side}_o30i"]
+
+            for raw_lower_value, raw_upper_value in zip(lower, upper):
+                lower_value = _optional_command(raw_lower_value)
+                upper_value = _optional_command(raw_upper_value)
+                if lower_value is None:
+                    assert upper_value is None
+                else:
+                    assert lower_value == 0
+                    assert upper_value == 255
 
     def test_o20_motor_commands_open_to_fist_direction(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"

@@ -757,7 +757,7 @@ class Retarget():
                 print(f"左手位置: {self.lefthand.g_jointpositions}")
             msg_l = JointState()
             msg_l.header.stamp = self.node.get_clock().now().to_msg()
-            msg_l.name = [f'joint{i + 1}' for i in range(len(self.lefthand.g_jointpositions))]
+            msg_l.name = self._joint_names_for(self.lefthand)
             msg_l.position = [float(num) for num in self.lefthand.g_jointpositions]
             self.publisher_l.publish(msg_l)
 
@@ -802,7 +802,7 @@ class Retarget():
 
             msg_r = JointState()
             msg_r.header.stamp = self.node.get_clock().now().to_msg()
-            msg_r.name = [f'joint{i + 1}' for i in range(len(self.righthand.g_jointpositions))]
+            msg_r.name = self._joint_names_for(self.righthand)
             msg_r.position = [float(num) for num in self.righthand.g_jointpositions]
             msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
             self._trace_o6_right_publish_before_topic(o6_pinky_raw_jump_trace, msg_r)
@@ -815,6 +815,13 @@ class Retarget():
                 self.publisher_hand_debugdata_r.publish(msg_debug_r)
         
         self.pubprintcount += 1
+
+    def _joint_names_for(self, hand):
+        positions = getattr(hand, "g_jointpositions", [])
+        topic_joint_names = getattr(hand, "topic_joint_names", None)
+        if topic_joint_names and len(topic_joint_names) == len(positions):
+            return list(topic_joint_names)
+        return [f'joint{i + 1}' for i in range(len(positions))]
 
     def _calculate_weighted_average(self, data_list):
         """

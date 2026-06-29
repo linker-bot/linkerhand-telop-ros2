@@ -5,6 +5,8 @@ v2.8.0升级了映射器算法
 """
 import numpy as np
 import copy
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from linkerhand.handcore import HandCore
 from ..config.o30i_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
@@ -18,6 +20,114 @@ O30I_MUJOCO_JOINT_ARC_INDICES = (
 )
 O30I_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(O30I_MUJOCO_JOINT_ARC_INDICES)
 
+O30I_TOPIC_JOINT_NAMES = (
+    "拇指横滚",
+    "拇指侧摆",
+    "食指侧摆",
+    "中指侧摆",
+    "无名指侧摆",
+    "小指侧摆",
+    "拇指指根",
+    "食指指根",
+    "中指指根",
+    "无名指指根",
+    "小指指根",
+    "食指指中",
+    "中指指中",
+    "无名指指中",
+    "小指指中",
+    "拇指指尖",
+    "食指指尖",
+    "中指指尖",
+    "无名指指尖",
+    "小指指尖",
+)
+
+O30I_MOTOR_QPOS_INDICES = (
+    16, 17, 0, 8, 12, 4,
+    18, 1, 9, 13, 5,
+    2, 10, 14, 6,
+    19, 2, 10, 14, 6,
+)
+
+O30I_MOTOR_ROBOT_INDICES = (
+    0, 1, 4, 8, 12, 16,
+    2, 5, 9, 13, 17,
+    6, 10, 14, 18,
+    3, 7, 11, 15, 19,
+)
+O30I_MOTOR_ARC_INDICES = O30I_MOTOR_ROBOT_INDICES
+O30I_REVERSED_MOTOR_ROBOT_INDICES = {0, 4, 8, 12, 16}
+
+
+def _clamp(value, lower, upper):
+    return min(upper, max(lower, value))
+
+
+def _scale_value(value, source_min, source_max, target_min, target_max):
+    if abs(source_max - source_min) < 1e-9:
+        return float(target_max)
+    ratio = (value - source_min) / (source_max - source_min)
+    ratio = max(0.0, min(1.0, ratio))
+    return float(target_min + ratio * (target_max - target_min))
+
+
+def _load_urdf_joint_limits(hand: str):
+    package_dir = Path(__file__).resolve().parents[3]
+    urdf_path = (
+        package_dir
+        / "assets"
+        / "robots"
+        / "hands"
+        / "linker_hand"
+        / f"o30i_{hand}"
+        / f"linkerhand_o30i_{hand}.urdf"
+    )
+    root = ET.parse(urdf_path).getroot()
+    limits = []
+    for joint in root.findall("joint"):
+        if joint.attrib.get("type") == "fixed":
+            continue
+        limit = joint.find("limit")
+        if limit is None:
+            limits.append((float("-inf"), float("inf")))
+            continue
+        limits.append((float(limit.attrib["lower"]), float(limit.attrib["upper"])))
+    return tuple(limits)
+
+
+O30I_URDF_JOINT_LIMITS_RIGHT = _load_urdf_joint_limits("right")
+O30I_URDF_JOINT_LIMITS_LEFT = _load_urdf_joint_limits("left")
+
+
+def _map_o30i_qpos_to_motor(qpos, hand: str):
+    joint_limits = O30I_URDF_JOINT_LIMITS_LEFT if hand == "left" else O30I_URDF_JOINT_LIMITS_RIGHT
+    jointpositions = [255.0] * len(O30I_MOTOR_QPOS_INDICES)
+    for index, (source_idx, robot_idx) in enumerate(zip(O30I_MOTOR_QPOS_INDICES, O30I_MOTOR_ROBOT_INDICES)):
+        if source_idx is None or robot_idx is None:
+            continue
+        if source_idx >= len(qpos) or robot_idx >= len(joint_limits):
+            continue
+        lower, upper = joint_limits[robot_idx]
+        value = _clamp(qpos[source_idx], lower, upper)
+        target_min, target_max = (255, 0) if robot_idx in O30I_REVERSED_MOTOR_ROBOT_INDICES else (0, 255)
+        jointpositions[index] = int(round(_scale_value(value, lower, upper, target_min, target_max)))
+    return jointpositions
+
+
+def _map_o30i_arc_to_motor(arc_values, hand: str):
+    joint_limits = O30I_URDF_JOINT_LIMITS_LEFT if hand == "left" else O30I_URDF_JOINT_LIMITS_RIGHT
+    jointpositions = [255.0] * len(O30I_MOTOR_ARC_INDICES)
+    for index, arc_idx in enumerate(O30I_MOTOR_ARC_INDICES):
+        if arc_idx is None:
+            continue
+        if arc_idx >= len(arc_values) or arc_idx >= len(joint_limits):
+            continue
+        lower, upper = joint_limits[arc_idx]
+        value = _clamp(arc_values[arc_idx], lower, upper)
+        target_min, target_max = (255, 0) if arc_idx in O30I_REVERSED_MOTOR_ROBOT_INDICES else (0, 255)
+        jointpositions[index] = int(round(_scale_value(value, lower, upper, target_min, target_max)))
+    return jointpositions
 
 def _build_o30i_right_mujoco_joint_arc_remaps(robot_original, robot_opose, robot_fist):
     _ = (robot_original, robot_opose, robot_fist)
@@ -157,7 +267,9 @@ class O30iStableDynamicWeightMultiStateLinearMapper(DynamicWeightMultiStateLinea
 class RightHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
+        self.hand_side = "right"
         self.g_jointpositions = [255] * length
+        self.topic_joint_names = O30I_TOPIC_JOINT_NAMES
         self.g_jointvelocity = [255] * length
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
@@ -211,6 +323,14 @@ class RightHand:
                 min_val = constraint.get('min', 0)
                 max_val = constraint.get('max', 255)
                 self.g_jointpositions[i] = int(max(min_val, min(max_val, self.g_jointpositions[i])))
+
+    def _set_g_jointpositions_from_qpos(self, qpos):
+        self.g_jointpositions = _map_o30i_qpos_to_motor(qpos, self.hand_side)
+        return self.g_jointpositions
+
+    def _set_g_jointpositions_from_arc(self):
+        self.g_jointpositions = _map_o30i_arc_to_motor(self.g_jointpositions_arc, self.hand_side)
+        return self.g_jointpositions
 
     def set_glove_version(self, version: str):
         if not version:
@@ -340,7 +460,10 @@ class RightHand:
             qpos[5] = joint_arc[18] * 0.1 + joint_arc[20] * 0.7
         
         # ========== 应用平滑滤波 ==========
-        self.g_jointpositions = self.handcore.trans_to_motor_right(qpos)
+        if arc_value is not None:
+            self._set_g_jointpositions_from_arc()
+        else:
+            self._set_g_jointpositions_from_qpos(qpos)
         self._apply_motor_constraints()
         self.g_jointpositions = self._apply_smooth(self.g_jointpositions)
 
@@ -396,7 +519,9 @@ class RightHand:
 class LeftHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
+        self.hand_side = "left"
         self.g_jointpositions = [255] * length
+        self.topic_joint_names = O30I_TOPIC_JOINT_NAMES
         self.g_jointvelocity = [255] * length
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
@@ -440,6 +565,14 @@ class LeftHand:
                 min_val = constraint.get('min', 0)
                 max_val = constraint.get('max', 255)
                 self.g_jointpositions[i] = int(max(min_val, min(max_val, self.g_jointpositions[i])))
+
+    def _set_g_jointpositions_from_qpos(self, qpos):
+        self.g_jointpositions = _map_o30i_qpos_to_motor(qpos, self.hand_side)
+        return self.g_jointpositions
+
+    def _set_g_jointpositions_from_arc(self):
+        self.g_jointpositions = _map_o30i_arc_to_motor(self.g_jointpositions_arc, self.hand_side)
+        return self.g_jointpositions
 
     def set_glove_version(self, version: str):
         if not version:
@@ -577,7 +710,10 @@ class LeftHand:
             qpos[13] = joint_arc[14] * 0.1 + joint_arc[16] * 0.7
             qpos[5] = joint_arc[18] * 0.1 + joint_arc[20] * 0.7
         
-        self.g_jointpositions = self.handcore.trans_to_motor_left(qpos)
+        if arc_value is not None:
+            self._set_g_jointpositions_from_arc()
+        else:
+            self._set_g_jointpositions_from_qpos(qpos)
 
         # print(qpos[4],arc_value[17],self.g_jointpositions[9])
         self._apply_motor_constraints()
