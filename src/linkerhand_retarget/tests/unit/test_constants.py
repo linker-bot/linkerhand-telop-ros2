@@ -29,6 +29,7 @@ class TestRobotName:
         assert RobotName.o7.value is not None
         assert RobotName.l6.value is not None
         assert RobotName.l20.value is not None
+        assert RobotName.l21.value is not None
         assert RobotName.o20.value is not None
         assert RobotName.o30.value is not None
         assert RobotName.o30i.value is not None
@@ -72,6 +73,7 @@ class TestRobotNameMap:
         assert ROBOT_NAME_MAP[RobotName.o7] == "linker_hand_o7"
         assert ROBOT_NAME_MAP[RobotName.l6] == "linker_hand_l6"
         assert ROBOT_NAME_MAP[RobotName.l20] == "linker_hand_l20"
+        assert ROBOT_NAME_MAP[RobotName.l21] == "linker_hand_l21"
         assert ROBOT_NAME_MAP[RobotName.l25] == "linker_hand_l25"
         assert ROBOT_NAME_MAP[RobotName.o20] == "linker_hand_o20"
         assert ROBOT_NAME_MAP[RobotName.o30] == "linker_hand_o30"
@@ -81,6 +83,7 @@ class TestRobotNameMap:
         assert ROBOT_LEN_MAP[RobotName.o7] == 7
         assert ROBOT_LEN_MAP[RobotName.l6] == 6
         assert ROBOT_LEN_MAP[RobotName.l20] == 20
+        assert ROBOT_LEN_MAP[RobotName.l21] == 25
         assert ROBOT_LEN_MAP[RobotName.l25] == 20
         assert ROBOT_LEN_MAP[RobotName.o20] == 20
         assert ROBOT_LEN_MAP[RobotName.o30] == 20
