@@ -361,6 +361,32 @@ def test_process_stops_without_entering_spin_when_calibration_fails(monkeypatch)
     assert events["spin_called"] == 0
 
 
+def test_handretarget_node_logs_sdk_version_on_start(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget import handretarget as handretarget_module
+
+    logger = FakeLogger()
+    calls = {"node_init": 0}
+
+    def fake_node_init(self, name):
+        calls["node_init"] += 1
+        self._logger = logger
+
+    monkeypatch.setattr(handretarget_module.Node, "__init__", fake_node_init)
+    monkeypatch.setattr(handretarget_module.HandRetargetNode, "get_logger", lambda self: self._logger, raising=False)
+    monkeypatch.setattr(handretarget_module, "get_version", lambda: "9.8.7")
+    monkeypatch.setattr(handretarget_module, "HandConfig", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("stop after version log")))
+
+    try:
+        handretarget_module.HandRetargetNode()
+    except RuntimeError as exc:
+        assert str(exc) == "stop after version log"
+
+    assert calls["node_init"] == 1
+    assert "LinkerHand Retarget SDK 版本: 9.8.7" in logger.infos
+
+
 def test_real_retargetrun_returns_false_and_skips_mujoco_when_process_fails(monkeypatch):
     install_ros_stubs(monkeypatch)
 

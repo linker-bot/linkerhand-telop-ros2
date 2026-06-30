@@ -54,6 +54,7 @@ from linkerhand_retarget.mujoco_display import (
     detect_loaded_hands,
     extract_mujoco_joint_positions,
 )
+from linkerhand_retarget.version import get_version
 
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
@@ -86,6 +87,7 @@ def signal_handler(sig, frame):
 class HandRetargetNode(Node):
     def __init__(self):
         super().__init__('handretarget_node')
+        self.get_logger().info(f"LinkerHand Retarget SDK 版本: {get_version()}")
         print("Ready Create HandRetargetNode!")
 
         package_share_dir = workspace_dir
