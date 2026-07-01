@@ -67,10 +67,12 @@ ros2 run linkerhand_retarget handretarget --ros-args \
 ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibrate
 ```
 
-标定时按照提示做三个动作：
-1. **五指张开** → 保持 5 秒
-2. **握紧拳头** → 保持 5 秒
-3. **O 型手势** → 保持 5 秒
+标定时按当前配置提示完成动作：
+
+- `show_fist: true`：**握紧拳头** → **O 型手势** → **五指张开**
+- `show_fist: false`：**O 型手势** → **五指张开**
+
+每个动作保持稳定约 5 秒，终端进度条走满后进入下一步。
 
 ---
 
@@ -169,12 +171,14 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 
 ### 标定流程
 
-1. **五指张开** → 保持 5 秒
-2. **O 型手势** → 保持 5 秒
+当前版本的标定顺序以 `show_fist` 开关为准：
 
-如果 `show_fist: true`，还会出现第三步：
+| 配置 | 标定顺序 |
+|------|----------|
+| `show_fist: true` | 握紧拳头 → O 型手势 → 五指张开 |
+| `show_fist: false` | O 型手势 → 五指张开 |
 
-3. **握紧拳头** → 保持 5 秒
+每一步都需要保持姿态稳定约 5 秒。`show_fist: false` 时不会采集真实握拳数据，握拳锚点会在标定完成后按延伸比例自动计算。
 
 多数已有型号的张开/握拳输出方向由 `hand_config.yml` 中的型号电机表决定。O20 单独定义为张开输出 `0`，握拳输出 `255`。
 
@@ -182,7 +186,7 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 
 | 对比项 | `show_fist: true` | `show_fist: false` |
 |--------|-------------------|-------------------|
-| 标定步骤 | 张开 → O 型 → 握拳（共 3 步） | 张开 → O 型（共 2 步） |
+| 标定步骤 | 握拳 → O 型 → 张开（共 3 步） | O 型 → 张开（共 2 步） |
 | 握拳数据来源 | 用户实际做握拳动作采集 | 从 O 型按比例延伸计算 |
 | 握拳延伸公式 | 无 | `fist = opose + (opose - original) × fist_extend_ratio` |
 | 映射精度 | 三段线性插值，最精确 | 两段插值，依赖延伸估算 |

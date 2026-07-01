@@ -68,10 +68,12 @@ ros2 run linkerhand_retarget handretarget --ros-args \
 ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibrate
 ```
 
-During calibration, perform three gestures as prompted:
-1. **Open hand** → hold for 5 seconds
-2. **Make fist** → hold for 5 seconds
-3. **O-pose** → hold for 5 seconds
+During calibration, follow the current `show_fist` setting:
+
+- `show_fist: true`: **Make fist** → **O-pose** → **Open hand**
+- `show_fist: false`: **O-pose** → **Open hand**
+
+Hold each gesture stable for about 5 seconds. The terminal progress bar advances to the next step after the current gesture is stable.
 
 ---
 
@@ -182,12 +184,14 @@ ros2 run linkerhand_retarget handretarget --ros-args -p calibration:=auto_calibr
 
 ### Calibration Process
 
-1. **Open hand** → hold for 5 seconds
-2. **O-pose** → hold for 5 seconds
+The current calibration order depends on `show_fist`:
 
-If `show_fist: true`, a third step appears:
+| Config | Calibration Order |
+|--------|-------------------|
+| `show_fist: true` | Make fist → O-pose → Open hand |
+| `show_fist: false` | O-pose → Open hand |
 
-3. **Make fist** → hold for 5 seconds
+Each step requires holding the gesture stable for about 5 seconds. When `show_fist: false`, real fist data is not collected; the fist anchor is calculated from the configured extension ratio after calibration.
 
 For most existing models, open and fist follow the model-specific command table in `hand_config.yml`. For O20, open is motor `0` and fist is motor `255`.
 
@@ -195,7 +199,7 @@ For most existing models, open and fist follow the model-specific command table 
 
 | Item | `show_fist: true` | `show_fist: false` |
 |------|-------------------|-------------------|
-| Calibration steps | Open → O-pose → Fist (3 steps) | Open → O-pose (2 steps) |
+| Calibration steps | Fist → O-pose → Open (3 steps) | O-pose → Open (2 steps) |
 | Fist data source | User actually performs fist gesture | Calculated from O-pose by ratio |
 | Fist formula | N/A | `fist = opose + (opose - original) × fist_extend_ratio` |
 | Mapping precision | Three-segment linear interpolation, most accurate | Two-segment interpolation, relies on extension |
