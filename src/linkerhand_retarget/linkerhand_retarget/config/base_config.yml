@@ -1,6 +1,6 @@
 calibration:
   fist_extend_ratio: 0.5
-  show_fist: false
+  show_fist: true
 debug:
   joint_motor_debug_l: false
   joint_motor_debug_r: false
