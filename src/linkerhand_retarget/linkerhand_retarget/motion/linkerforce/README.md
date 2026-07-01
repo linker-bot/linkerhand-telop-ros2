@@ -124,6 +124,44 @@ ros2 run linkerhand_retarget handretarget --ros-args \
 
 ---
 
+## Force Feedback
+
+LinkerFFG subscribes to tactile matrix topics and converts the peak value of each finger matrix into five force-feedback values sent back to the glove:
+
+| Input Topic | Hand | Data Requirement |
+|-------------|------|------------------|
+| `/cb_left_hand_matrix_touch` | Left | JSON string containing five finger tactile matrices |
+| `/cb_right_hand_matrix_touch` | Right | JSON string containing five finger tactile matrices |
+
+The matrix field names are fixed:
+
+- `thumb_matrix`
+- `index_matrix`
+- `middle_matrix`
+- `ring_matrix`
+- `little_matrix`
+
+Each finger feedback value is calculated as:
+
+```text
+max_force = min(max(matrix) * 4, 500)
+```
+
+The value `500` is the force-feedback ratio ceiling and corresponds to 50% torque output. It does not mean 500 N. The driver packs the five `max_force` values into `forcelist` and sends them to the glove through the LinkerFFG force-feedback frame.
+
+Using a 4.8 V servo torque of `3.5 kg·cm` and a `10 cm` lever arm:
+
+```text
+Output force = 3.5 kg·cm * 50% / 10 cm
+             = 0.175 kgf
+             ≈ 0.18 kgf
+             ≈ 1.8 N
+```
+
+So when the tactile matrix peak reaches `500` after conversion, the current feedback path drives about 50% torque, which is roughly `1.8 N` at the fingertip under this estimate. Actual perceived force depends on glove mechanics, friction, strap tightness, supply voltage, and tactile matrix calibration. During field tuning, start from lower tactile input or a lower feedback ratio.
+
+---
+
 ## Calibration Details
 
 ### Calibration Config
