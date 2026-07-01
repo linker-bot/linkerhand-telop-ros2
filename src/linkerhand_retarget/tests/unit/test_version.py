@@ -1,4 +1,31 @@
+import ast
 from pathlib import Path
+
+
+def _contains_pep604_union(annotation):
+    if annotation is None:
+        return False
+    return any(
+        isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
+        for node in ast.walk(annotation)
+    )
+
+
+def test_version_module_annotations_are_python39_compatible():
+    source_path = Path(__file__).parents[2] / "linkerhand_retarget" / "version.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    pep604_annotations = []
+
+    for node in ast.walk(tree):
+        annotation = getattr(node, "annotation", None)
+        if _contains_pep604_union(annotation):
+            pep604_annotations.append(getattr(node, "arg", getattr(node, "name", "unknown")))
+
+        returns = getattr(node, "returns", None)
+        if _contains_pep604_union(returns):
+            pep604_annotations.append(getattr(node, "name", "return"))
+
+    assert pep604_annotations == []
 
 
 def test_get_version_reads_first_version_heading(tmp_path):

@@ -1,11 +1,12 @@
 import re
 from pathlib import Path
+from typing import Optional
 
 
 _VERSION_HEADING_RE = re.compile(r"^##\s+v?([0-9]+(?:\.[0-9]+){1,3})\s*$")
 
 
-def find_version_file(start: Path | None = None) -> Path:
+def find_version_file(start: Optional[Path] = None) -> Path:
     current = Path(start or __file__).resolve()
     if current.is_file():
         current = current.parent
@@ -26,7 +27,7 @@ def _fallback_version() -> str:
     return str(__version__)
 
 
-def get_version(version_file: Path | None = None) -> str:
+def get_version(version_file: Optional[Path] = None) -> str:
     path = Path(version_file) if version_file is not None else find_version_file()
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
