@@ -29,7 +29,7 @@ netpub:
   ip: 192.168.11.33
   port: 20008
 serial:
-  auto_scan: false
+  auto_scan: true
   baudrates:
   - 2000000
   - 460800
@@ -38,7 +38,7 @@ serial:
   exclude_ports: []
   left:
     baudrate: 2000000
-    port: /dev/ttyUSB1
+    port: /dev/ttyUSB0
   right:
     baudrate: 2000000
     port: /dev/ttyUSB0
@@ -54,8 +54,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: o30i
-  robotname_r: o30i
+  robotname_l: o20
+  robotname_r: o20
   sapientype: left
   usecan: false
   usegui: false
