@@ -6,7 +6,7 @@
 - 完成 LinkerFFG 的 O20/O30/O30i 映射接入，支持按 `original`、`opose`、`fist` 标定锚点输出目标弧度，并按 URDF 上下限截断。
 - 优化 O20/O30i 电机输出换算：根据 MuJoCo/URDF 弧度归一化到 `0..255`，修正拇指 roll/yaw 和四指侧摆方向问题。
 - 调整 LinkerFFG 自动标定顺序：启用握拳采集时为 `fist -> opose -> open`，禁用时为 `opose -> open`，并增强单手连接和标定缓存保护。
-- 强化串口连接链路：支持命令行候选串口、配置固定串口和 `auto_scan` 自动扫描，结合 `baudrates`、`exclude_ports`、`handtype` 和 `version` 做识别与诊断日志。
+- 强化串口连接链路：支持命令行候选串口、配置固定串口和 `auto_scan` 自动扫描，版本查询阶段同步抓包并按 `VERSION_QUERY_RETRY_COUNT` 重试，确认手套版本和手型后再启动运行期读取线程。
 - 增加串口调试和退出保护：记录串口位置帧数，增加 O6 右手小指原始跳变跟踪，启动或标定失败时停止串口线程并关闭 MuJoCo。
 - 补充 MuJoCo 显示和依赖说明：支持按已连接手套选择显示模型，新增额外安装清单，并明确 ROS2 运行依赖不写入项目依赖清单。
 - 更新 ROS2、LinkerFFG、LinkerMCG 和第三方机械手映射文档，新增 SDK 启动版本号日志，并补充相关回归测试。
