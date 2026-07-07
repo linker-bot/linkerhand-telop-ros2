@@ -528,18 +528,11 @@ class Retarget():
             for baudrate in baudrates:
                 try:
                     if temp_reader.openserial(port=port, baudrate=baudrate):
-                        temp_reader.start()
-                        time.sleep(0.1)
-                        temp_reader.serial_port.write(temp_reader.pack_01_data())
-                        
-                        for _ in range(10):
-                            time.sleep(0.1)
-                            if temp_reader.handtype:
-                                detected_ports[port] = (temp_reader.handtype, baudrate, temp_reader.version)
-                                self.node.get_logger().info(f"检测到 {port}: {temp_reader.handtype} @ {baudrate}")
-                                detected = True
-                                break
-                        
+                        if temp_reader.query_version_sync():
+                            detected_ports[port] = (temp_reader.handtype, baudrate, temp_reader.version)
+                            self.node.get_logger().info(f"检测到 {port}: {temp_reader.handtype} @ {baudrate}")
+                            detected = True
+
                         if detected:
                             break
                 except Exception as e:
@@ -613,12 +606,8 @@ class Retarget():
             self.node.get_logger().info(f"尝试预设{hand_name}串口: {saved_port}")
             try:
                 if reader.openserial(port=saved_port, baudrate=int(saved_baudrate)):
-                    time.sleep(0.3)
-                    reader.start()
-                    time.sleep(0.3)
-                    reader.serial_port.write(reader.pack_01_data())
-                    time.sleep(0.3)
-                    if reader.handtype == hand_type:
+                    if reader.query_version_sync() and reader.handtype == hand_type:
+                        reader.start()
                         self.node.get_logger().info(f"预设{hand_name}串口有效, 版本{reader.version}")
                         if hand_type == 'Left':
                             self.leftport = saved_port
@@ -646,12 +635,8 @@ class Retarget():
                 port, baudrate, errorcode = reader.find_valid_ports(timeout=0.001)
                 if port:
                     if reader.openserial(port=port, baudrate=baudrate):
-                        time.sleep(0.3)
-                        reader.start()
-                        time.sleep(0.3)
-                        reader.serial_port.write(reader.pack_01_data())
-                        time.sleep(0.3)
-                        if reader.handtype == hand_type:
+                        if reader.query_version_sync() and reader.handtype == hand_type:
+                            reader.start()
                             self.node.get_logger().info(f"已搜索到{hand_name}力反馈手套, 版本{reader.version}")
                             if hand_type == 'Left':
                                 self.leftport = port
@@ -667,6 +652,7 @@ class Retarget():
                                     self.node.get_logger().info(f"[手套版本] 右手: v{reader.version.split('.')[0]} ({reader.version})")
                             found = True
                         else:
+                            reader.stop()
                             self.node.get_logger().warn(f"{hand_name}无法正常识别")
                 else:
                     self.node.get_logger().warn(f"未搜索到{hand_name}力反馈手套")

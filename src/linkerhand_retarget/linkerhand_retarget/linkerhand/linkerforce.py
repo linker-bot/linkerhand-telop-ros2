@@ -37,6 +37,7 @@ READ_INTERVAL = 0.003
 ERROR_DELAY = 0.01
 RETRY_DELAY = 0.5
 QUERY_INTERVAL = 10
+VERSION_QUERY_RETRY_COUNT = 10
 
 # 超时常量
 CONNECTION_TIMEOUT = 5.0
@@ -572,6 +573,55 @@ class ForceSerialReader:
 
         return None, None, None
 
+    def _poll_serial_frames_once(self, parser: FrameParser) -> None:
+        if not self.serial_port:
+            return
+
+        waiting = getattr(self.serial_port, "in_waiting", 0)
+        if waiting <= 0:
+            return
+
+        data = self.serial_port.read(waiting)
+        for byte in data:
+            if parser.process_byte(byte):
+                self._on_data_received(parser.frame_buf)
+                parser.reset()
+
+    def query_version_sync(
+        self,
+        retry_count: int = VERSION_QUERY_RETRY_COUNT,
+        response_wait: float = WARMUP_DELAY,
+    ) -> bool:
+        if not self.serial_port:
+            return False
+
+        retry_count = max(1, retry_count)
+        self.handtype = None
+        self.version = None
+        self.connflag = False
+        parser = FrameParser()
+
+        try:
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
+        except Exception:
+            pass
+
+        for _ in range(retry_count):
+            self.serial_port.write(self.pack_01_data())
+
+            deadline = time.time() + response_wait
+            while True:
+                self._poll_serial_frames_once(parser)
+                if self.handtype is not None:
+                    return True
+                if time.time() >= deadline:
+                    break
+                time.sleep(READ_INTERVAL)
+
+        self._poll_serial_frames_once(parser)
+        return self.handtype is not None
+
     def query_serial_port(self, port_name: str, timeout: float = 1) -> tuple:
         best_baudrate: Optional[int] = None
         errorcode: Optional[int] = None
@@ -588,38 +638,15 @@ class ForceSerialReader:
                 if self.isdebug:
                     self._log('debug', f"串口 {port_name} 波特率 {baudrate} 预热中...")
 
-                self.handtype = None
-                self.connflag = False
-
-                ser.reset_input_buffer()
-                ser.reset_output_buffer()
-
-                # 预热发送
-                for _ in range(3):
-                    ser.write(self.pack_01_data())
-                    time.sleep(WARMUP_DELAY)
-
-                # 启动临时读取线程
-                self._connection.running = Event()  # 重置 Event
-                self._connection.serial_port = ser
-                self._connection.running.set()
-                self._connection.thread = Thread(target=self._connection._run, 
-                                                 args=(self._on_data_received, self._get_query_data), 
-                                                 daemon=True)
-                self._connection.thread.start()
-                time.sleep(RESPONSE_WAIT)
-
                 if self.isdebug:
-                    self._log('debug', f"侦测串口 {port_name} 波特率 {baudrate} 是否联通...")
+                    self._log('debug', f"同步侦测串口 {port_name} 波特率 {baudrate} 是否联通...")
 
-                ser.write(self.pack_01_data())
-                time.sleep(FINAL_WAIT)
-
-                # 停止临时线程
-                self._connection.stop()
+                detected = self.query_version_sync(response_wait=max(timeout, READ_INTERVAL))
+                if ser and ser.is_open:
+                    ser.close()
                 self.serial_port = None
 
-                if self.connflag and self.handtype is not None:
+                if detected:
                     best_baudrate = baudrate
                     if self.isdebug:
                         self._log('info', f"串口 {port_name} 在 {baudrate} 波特率下有响应")

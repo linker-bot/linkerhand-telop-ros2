@@ -468,7 +468,7 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
             self.is_open = True
 
         def write(self, _data):
-            if self.reader.detects_on_query:
+            if self.reader.detects_on_query and self.reader.version_query_count >= 10:
                 self.reader.handtype = "Left"
                 self.reader.version = "1.2.3"
                 self.reader.connflag = True
@@ -481,6 +481,8 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
             self.version = None
             self.connflag = False
             self.position_frame_count = 0
+            self.start_count = 0
+            self.version_query_count = 0
             self.serial_port = FakeSerialPort(self)
             created_readers.append(self)
 
@@ -490,7 +492,16 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
             self.serial_port = FakeSerialPort(self)
             return True
 
+        def query_version_sync(self):
+            for _ in range(10):
+                self.version_query_count += 1
+                self.serial_port.write(self.pack_01_data())
+                if self.handtype:
+                    return True
+            return False
+
         def start(self):
+            self.start_count += 1
             if self.handtype:
                 self.connflag = True
                 self.position_frame_count = 1
@@ -539,6 +550,8 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
 
     assert left_found is True
     assert right_found is False
+    assert created_readers[0].version_query_count == 10
+    assert created_readers[0].start_count == 0
     assert retarget.force_reader_left is created_readers[1]
     assert retarget.force_reader_left.handtype == "Left"
     assert retarget.force_reader_left.version == "1.2.3"
@@ -583,7 +596,7 @@ def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monk
             self.reader = reader
 
         def write(self, _data):
-            if self.reader.detects_on_query:
+            if self.reader.detects_on_query and self.reader.version_query_count >= 10:
                 self.reader.handtype = "Right"
                 self.reader.version = "2.1.5"
 
@@ -592,6 +605,8 @@ def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monk
             self.detects_on_query = len(created_readers) == 0
             self.handtype = None
             self.version = None
+            self.start_count = 0
+            self.version_query_count = 0
             self.serial_port = FakeSerialPort(self)
             created_readers.append(self)
 
@@ -600,8 +615,16 @@ def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monk
             self.baudrate = baudrate
             return port == "/dev/ttyUSB0"
 
+        def query_version_sync(self):
+            for _ in range(10):
+                self.version_query_count += 1
+                self.serial_port.write(self.pack_01_data())
+                if self.handtype:
+                    return True
+            return False
+
         def start(self):
-            pass
+            self.start_count += 1
 
         def stop(self):
             pass

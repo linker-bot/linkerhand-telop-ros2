@@ -1,6 +1,18 @@
 import pytest
 import array
-from linkerhand_retarget.linkerhand.linkerforce import CircularBuffer, FrameParser, FrameParseState, BUFFER_SIZE, FRAME_HEADER
+import struct
+from linkerhand_retarget.linkerhand.constants import HandType
+from linkerhand_retarget.linkerhand.linkerforce import (
+    CircularBuffer,
+    CommandCode,
+    ForceSerialReader,
+    FrameHandler,
+    FrameParser,
+    FrameParseState,
+    BUFFER_SIZE,
+    FRAME_HEADER,
+    VERSION_QUERY_RETRY_COUNT,
+)
 
 
 class TestCircularBuffer:
@@ -117,3 +129,91 @@ class TestConstants:
         assert FrameParseState.LENGTH.value == 2
         assert FrameParseState.DATA.value == 3
         assert FrameParseState.CHECKSUM.value == 4
+
+
+class TestForceSerialReaderVersionQuery:
+    def test_sync_version_query_retries_until_retry_limit_without_thread(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        payload = struct.pack("<IB", 10203, 1)
+        version_frame = FrameHandler.pack_data(CommandCode.VERSION_QUERY.value, payload)
+
+        class FakeSerialPort:
+            def __init__(self):
+                self.write_count = 0
+                self.buffer = bytearray()
+                self.is_open = True
+
+            @property
+            def in_waiting(self):
+                return len(self.buffer)
+
+            def write(self, _data):
+                self.write_count += 1
+                if self.write_count == VERSION_QUERY_RETRY_COUNT:
+                    self.buffer.extend(version_frame)
+
+            def read(self, size):
+                data = bytes(self.buffer[:size])
+                del self.buffer[:size]
+                return data
+
+            def reset_input_buffer(self):
+                self.buffer.clear()
+
+            def reset_output_buffer(self):
+                pass
+
+        reader = ForceSerialReader(HandType.right)
+        serial_port = FakeSerialPort()
+        reader.serial_port = serial_port
+
+        assert reader.query_version_sync(response_wait=0) is True
+        assert serial_port.write_count == VERSION_QUERY_RETRY_COUNT
+        assert reader.handtype == "Right"
+        assert reader.version == "1.2.3"
+
+    def test_sync_version_query_stops_after_first_success(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        payload = struct.pack("<IB", 10203, 1)
+        version_frame = FrameHandler.pack_data(CommandCode.VERSION_QUERY.value, payload)
+
+        class FakeSerialPort:
+            def __init__(self):
+                self.write_count = 0
+                self.buffer = bytearray(version_frame)
+                self.is_open = True
+
+            @property
+            def in_waiting(self):
+                return len(self.buffer)
+
+            def write(self, _data):
+                self.write_count += 1
+
+            def read(self, size):
+                data = bytes(self.buffer[:size])
+                del self.buffer[:size]
+                return data
+
+            def reset_input_buffer(self):
+                pass
+
+            def reset_output_buffer(self):
+                pass
+
+        reader = ForceSerialReader(HandType.right)
+        serial_port = FakeSerialPort()
+        reader.serial_port = serial_port
+
+        assert reader.query_version_sync(response_wait=0) is True
+        assert serial_port.write_count == 1
+        assert reader.handtype == "Right"
+        assert reader.version == "1.2.3"
