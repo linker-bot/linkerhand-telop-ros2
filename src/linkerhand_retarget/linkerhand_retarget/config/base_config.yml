@@ -42,7 +42,7 @@ serial:
   right:
     baudrate: 2000000
     port: /dev/ttyUSB0
-  serial_debug: false
+  serial_debug: true
 system:
   can:
     bitrate: 1000000
