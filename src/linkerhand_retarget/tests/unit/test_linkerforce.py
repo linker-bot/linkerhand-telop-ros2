@@ -9,6 +9,7 @@ from linkerhand_retarget.linkerhand.linkerforce import (
     FrameHandler,
     FrameParser,
     FrameParseState,
+    SerialConnection,
     BUFFER_SIZE,
     FRAME_HEADER,
     VERSION_QUERY_RETRY_COUNT,
@@ -175,6 +176,56 @@ class TestForceSerialReaderVersionQuery:
         assert serial_port.write_count == VERSION_QUERY_RETRY_COUNT
         assert reader.handtype == "Right"
         assert reader.version == "1.2.3"
+
+
+class TestSerialConnectionClose:
+    def test_close_cancels_pending_read_before_closing_port(self):
+        events = []
+
+        class FakeSerialPort:
+            is_open = True
+
+            def cancel_read(self):
+                events.append("cancel_read")
+
+            def close(self):
+                events.append("close")
+                self.is_open = False
+
+        connection = SerialConnection()
+        connection.serial_port = FakeSerialPort()
+
+        connection.close()
+
+        assert events == ["cancel_read", "close"]
+        assert connection.serial_port is None
+        assert not connection.running.is_set()
+
+    def test_run_exits_without_logging_error_after_stop(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        messages = []
+
+        class FakeLogger:
+            def log(self, level, message):
+                messages.append((level, message))
+
+        class ClosedPort:
+            @property
+            def in_waiting(self):
+                raise OSError("port closed")
+
+        connection = SerialConnection(logger=FakeLogger(), isdebug=True)
+        connection.serial_port = ClosedPort()
+        connection.running.set()
+        connection.running.clear()
+
+        connection._run(None, None)
+
+        assert messages == []
 
     def test_sync_version_query_stops_after_first_success(self, monkeypatch):
         monkeypatch.setattr(

@@ -397,13 +397,22 @@ class SerialConnection:
             return False
 
     def close(self) -> None:
-        # 先关闭串口，解除阻塞，让线程快速退出
-        if self.serial_port and self.serial_port.is_open:
-            self.serial_port.close()
+        self.running.clear()
+        serial_port = self.serial_port
+        if serial_port and serial_port.is_open:
+            try:
+                cancel_read = getattr(serial_port, "cancel_read", None)
+                if cancel_read:
+                    cancel_read()
+            except (OSError, serial.SerialException):
+                pass
+            try:
+                serial_port.close()
+            except (OSError, serial.SerialException):
+                pass
         self.serial_port = None
 
-        self.running.clear()
-        if self.thread and self.thread.is_alive():
+        if self.thread and self.thread.is_alive() and self.thread is not threading.current_thread():
             self.thread.join(timeout=1.0)
 
     def start(self, data_callback: Callable[[array.array], None], 
@@ -471,6 +480,8 @@ class SerialConnection:
                 time.sleep(READ_INTERVAL)
 
             except Exception as e:
+                if not self.running.is_set():
+                    break
                 if self.logger and self.isdebug:
                     self.logger.log('error', f"串口读取错误: {e}")
                 time.sleep(ERROR_DELAY)
