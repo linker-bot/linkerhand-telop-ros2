@@ -387,7 +387,8 @@ class SerialConnection:
                 timeout=0.001,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                bytesize=serial.EIGHTBITS
+                bytesize=serial.EIGHTBITS,
+                exclusive=True,
             )
             self.running = Event()
             return True
@@ -538,6 +539,7 @@ class ForceSerialReader:
         self._scanner = SerialScanner(baudrates, excludelist, self._logger)
         self._handler = FrameHandler(gettype, self._logger)
         self._connection = SerialConnection(self._logger, isdebug)
+        self._serial_write_lock = threading.Lock()
 
         # 串口参数代理
         self.serial_port: Optional[serial.Serial] = None
@@ -670,7 +672,8 @@ class ForceSerialReader:
                 ser = serial.Serial(port_name, baudrate, timeout=timeout,
                                     bytesize=serial.EIGHTBITS,
                                     parity=serial.PARITY_NONE,
-                                    stopbits=serial.STOPBITS_ONE)
+                                    stopbits=serial.STOPBITS_ONE,
+                                    exclusive=True)
                 self.serial_port = ser
 
                 if self.isdebug:
@@ -748,12 +751,22 @@ class ForceSerialReader:
             if 'poslist' in result:
                 self.position_frame_count += 1
             if 'force_response' in result and self.serial_port:
-                self.serial_port.write(self.pack_A7_data(self.forcelist))
+                self._write_serial(self.pack_A7_data(self.forcelist))
 
     def _get_query_data(self) -> Optional[bytes]:
         if self.handtype is not None:
             return self.pack_03_data()
         return None
+
+    def _write_serial(self, data: bytes) -> bool:
+        if not self.serial_port:
+            return False
+        with self._serial_write_lock:
+            self.serial_port.write(data)
+        return True
+
+    def write_force_feedback(self) -> bool:
+        return self._write_serial(self.pack_04_data())
 
     def set_reconnect_callback(self, callback: Callable[[], None]) -> None:
         self._connection.set_reconnect_callback(callback)

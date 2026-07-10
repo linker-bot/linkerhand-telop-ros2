@@ -80,8 +80,17 @@ right_hand_pose_end = []
 left_hand_pose_end = []
 
 
+def shutdown_rclpy_if_running():
+    try:
+        ok = getattr(rclpy, "ok", None)
+        if ok is None or ok():
+            rclpy.shutdown()
+    except RuntimeError:
+        pass
+
+
 def signal_handler(sig, frame):
-    rclpy.shutdown()
+    shutdown_rclpy_if_running()
 
 
 class HandRetargetNode(Node):
@@ -477,7 +486,7 @@ def main(args=None):
                     except Exception as exc:
                         node.get_logger().warn(f"关闭 MuJoCo display 失败: {exc}")
             node.destroy_node()
-        rclpy.shutdown()
+        shutdown_rclpy_if_running()
 
 
 if __name__ == '__main__':

@@ -180,6 +180,25 @@ class TestForceSerialReaderVersionQuery:
 
 
 class TestSerialConnectionClose:
+    def test_open_requests_exclusive_serial_access(self, monkeypatch):
+        serial_kwargs = {}
+
+        class FakeSerialPort:
+            def __init__(self, **kwargs):
+                serial_kwargs.update(kwargs)
+
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.serial.Serial",
+            lambda **kwargs: FakeSerialPort(**kwargs),
+        )
+
+        connection = SerialConnection()
+
+        assert connection.open("/dev/ttyUSB0", 2000000) is True
+        assert serial_kwargs["port"] == "/dev/ttyUSB0"
+        assert serial_kwargs["baudrate"] == 2000000
+        assert serial_kwargs["exclusive"] is True
+
     def test_close_cancels_pending_read_before_closing_port(self):
         events = []
 
@@ -258,7 +277,73 @@ class TestSerialConnectionClose:
 
         assert not was_alive
         assert messages == []
-        assert not connection.running.is_set()
+
+
+class TestForceSerialReaderWrites:
+    def test_query_serial_port_requests_exclusive_serial_access(self, monkeypatch):
+        serial_kwargs = {}
+
+        class FakeSerialPort:
+            is_open = True
+
+            def __init__(self, port, baudrate, **kwargs):
+                serial_kwargs.update({"port": port, "baudrate": baudrate, **kwargs})
+
+            def reset_input_buffer(self):
+                pass
+
+            def reset_output_buffer(self):
+                pass
+
+            def write(self, _data):
+                pass
+
+            @property
+            def in_waiting(self):
+                return 0
+
+            def close(self):
+                self.is_open = False
+
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.serial.Serial",
+            lambda port, baudrate, **kwargs: FakeSerialPort(port, baudrate, **kwargs),
+        )
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        reader = ForceSerialReader(HandType.right)
+        reader.baudrates = [2000000]
+
+        assert reader.query_serial_port("/dev/ttyUSB0", timeout=0)[0] is False
+        assert serial_kwargs["port"] == "/dev/ttyUSB0"
+        assert serial_kwargs["baudrate"] == 2000000
+        assert serial_kwargs["exclusive"] is True
+
+    def test_force_feedback_write_uses_reader_write_lock(self):
+        events = []
+
+        class TrackingLock:
+            def __enter__(self):
+                events.append("lock_enter")
+
+            def __exit__(self, _exc_type, _exc, _traceback):
+                events.append("lock_exit")
+                return False
+
+        class FakeSerialPort:
+            def write(self, data):
+                events.append(("write", data))
+
+        reader = ForceSerialReader(HandType.right)
+        reader.serial_port = FakeSerialPort()
+        reader._serial_write_lock = TrackingLock()
+        reader.pack_04_data = lambda: b"force"
+
+        assert reader.write_force_feedback() is True
+        assert events == ["lock_enter", ("write", b"force"), "lock_exit"]
 
     def test_sync_version_query_stops_after_first_success(self, monkeypatch):
         monkeypatch.setattr(

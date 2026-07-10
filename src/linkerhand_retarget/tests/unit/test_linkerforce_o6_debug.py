@@ -7,7 +7,7 @@ import pytest
 from linkerhand_retarget.linkerhand.constants import RobotName
 
 
-def test_o6_right_pinky_trace_logs_every_raw_poslist_frame(monkeypatch):
+def test_o6_right_pinky_trace_captures_raw_poslist_without_verbose_warning(monkeypatch):
     def install_ros_stubs():
         rclpy = types.ModuleType("rclpy")
         rclpy_node = types.ModuleType("rclpy.node")
@@ -74,18 +74,10 @@ def test_o6_right_pinky_trace_logs_every_raw_poslist_frame(monkeypatch):
     assert trace["raw_indices"] == [18, 19, 20]
     assert trace["raw_delta"] == pytest.approx([0.8, 0.0, 0.0])
     assert trace["max_index"] == 18
-    assert len(warnings) == 2
-    assert "[O6右手小指根部原始数据跟踪]" in warnings[0]
-    assert "is_jump=False" in warnings[0]
-    assert "[O6右手小指根部原始数据跟踪]" in warnings[1]
-    assert "is_jump=True" in warnings[1]
-    assert "raw_idx=[18, 19, 20]" in warnings[1]
-    assert "raw_delta=[0.800000" in warnings[1]
-    assert "max_idx=18" in warnings[1]
-    assert "left_valid=False" in warnings[1]
+    assert warnings == []
 
 
-def test_o6_right_pinky_publish_trace_logs_before_topic_publish(monkeypatch):
+def test_o6_right_publish_trace_logs_frame_rate_without_payload_details(monkeypatch):
     def install_ros_stubs():
         rclpy = types.ModuleType("rclpy")
         rclpy_node = types.ModuleType("rclpy.node")
@@ -116,20 +108,24 @@ def test_o6_right_pinky_publish_trace_logs_before_topic_publish(monkeypatch):
 
     from linkerhand_retarget.motion.linkerforce.retarget import Retarget
 
-    warnings = []
+    infos = []
 
     class FakeLogger:
         def warn(self, msg):
-            warnings.append(msg)
+            raise AssertionError(f"unexpected warning: {msg}")
+
+        def info(self, msg):
+            infos.append(msg)
 
     retarget = Retarget.__new__(Retarget)
     retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
     retarget.pubprintcount = 12
-    msg = SimpleNamespace(
-        name=[f"joint{i + 1}" for i in range(6)],
-        position=[10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
-        velocity=[255.0, 255.0, 255.0, 255.0, 255.0, 128.0],
-    )
+    retarget.debug_o6_publish_rate_start_time = None
+    retarget.debug_o6_publish_rate_last_time = None
+    retarget.debug_o6_publish_rate_total_count = 0
+    retarget.debug_o6_publish_rate_window_count = 0
+    retarget.debug_o6_publish_rate_interval = 1.0
+    retarget.debug_last_force04_r = [10.0, 20.0, 30.0, 40.0, 50.0]
     trace = {
         "raw_indices": [18, 19, 20],
         "raw_previous": [2.0, 0.2, 0.3],
@@ -144,11 +140,19 @@ def test_o6_right_pinky_publish_trace_logs_before_topic_publish(monkeypatch):
         "glove_version": "v2",
     }
 
-    retarget._trace_o6_right_publish_before_topic(trace, msg)
+    monotonic_values = iter([100.0, 100.4, 101.2])
+    monkeypatch.setattr("linkerhand_retarget.motion.linkerforce.retarget.time.monotonic", lambda: next(monotonic_values))
 
-    assert len(warnings) == 1
-    assert "[O6右手小指根部发布前跟踪]" in warnings[0]
-    assert "publish_position=[10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000]" in warnings[0]
-    assert "pinky_motor=60.000000" in warnings[0]
-    assert "pinky_velocity=128.000000" in warnings[0]
-    assert "pub_count=12" in warnings[0]
+    retarget._trace_o6_right_publish_frame_rate(trace)
+    retarget._trace_o6_right_publish_frame_rate(trace)
+    retarget._trace_o6_right_publish_frame_rate(trace)
+
+    assert len(infos) == 1
+    assert "[O6右手发布帧率跟踪]" in infos[0]
+    assert "pub_count=12" in infos[0]
+    assert "window_frames=3" in infos[0]
+    assert "elapsed=1.200s" in infos[0]
+    assert "fps=2.50Hz" in infos[0]
+    assert "force04=[10.00, 20.00, 30.00, 40.00, 50.00]" in infos[0]
+    assert "publish_position" not in infos[0]
+    assert "pinky_motor" not in infos[0]

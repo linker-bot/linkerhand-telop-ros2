@@ -2,6 +2,14 @@ import time
 import sys
 import rclpy
 from rclpy.node import Node
+try:
+    from rclpy.executors import SingleThreadedExecutor
+except ImportError:
+    SingleThreadedExecutor = None
+try:
+    from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+except ImportError:
+    MutuallyExclusiveCallbackGroup = None
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String, Int32MultiArray, Header, Float32MultiArray, MultiArrayLayout, MultiArrayDimension
 from pathlib import Path
@@ -36,6 +44,7 @@ import yaml
 
 TMP_FILE_PATH = Path(__file__).parent / "tmp" / "jointangle_data.tmp"
 SAMPLE_FILE_PATH = Path(__file__).parent.parent.parent / "config" / "calibration_sample.yml"
+FORCE_FEEDBACK_THREAD_HZ = 30.0
 
 
 class Retarget():
@@ -81,6 +90,10 @@ class Retarget():
         self.righthandpubprint = righthandpubprint
         self.isdebugpub = isgetdebug
         self.baseconfig = baseconfig or {}
+        self.retarget_callback_group = MutuallyExclusiveCallbackGroup() if MutuallyExclusiveCallbackGroup else None
+        self.touch_node = None
+        self.touch_executor = None
+        self.touch_executor_thread = None
         
         self.show_fist_calibration = self.baseconfig.get('calibration', {}).get('show_fist', True)
         self.fist_extend_ratio = self.baseconfig.get('calibration', {}).get('fist_extend_ratio', 0.5)
@@ -190,21 +203,6 @@ class Retarget():
             '/cb_left_hand_control_angle_cmd',
             self.handcore.hand_numjoints_l)
 
-        # 创建订阅者，订阅/cb_left_hand_matrix_touch话题
-        self.left_touch_subscription = self.node.create_subscription(
-            String,
-            '/cb_left_hand_matrix_touch',
-            self.touch_left_callback,
-            10  # QoS 队列深度
-        )
-        self.right_touch_subscription = self.node.create_subscription(
-            String,
-            '/cb_right_hand_matrix_touch', 
-            self.touch_right_callback,
-            10  # QoS 队列深度
-        )
-
-
         if self.isdebugpub:
             # # ROS1 发布器，触感矩阵转换相关
             # self.publisher_hand_matrix2int_r = self.node.create_publisher(
@@ -253,6 +251,9 @@ class Retarget():
 
         # 力数据线程锁
         self.forcelock = threading.Lock()
+        self.force_feedback_thread_interval = 1.0 / FORCE_FEEDBACK_THREAD_HZ
+        self.force_feedback_running = threading.Event()
+        self.force_feedback_thread = None
 
         # 自动标定相关变量
         self.calibration_data_left = []
@@ -268,6 +269,13 @@ class Retarget():
         self.debug_last_raw_l = [0.0] * 21
         self.debug_last_raw_r = [0.0] * 21
         self.debug_last_o6_pinky_raw_r = None
+        self.debug_o6_publish_rate_interval = 1.0
+        self.debug_o6_publish_rate_start_time = None
+        self.debug_o6_publish_rate_last_time = None
+        self.debug_o6_publish_rate_total_count = 0
+        self.debug_o6_publish_rate_window_count = 0
+        self.debug_last_force04_l = None
+        self.debug_last_force04_r = None
 
 
 
@@ -277,42 +285,148 @@ class Retarget():
     def touch_right_callback(self, msg):
         self.process_touch_data(msg.data,'right')
 
+    def _start_touch_subscription_worker(self):
+        if self.touch_executor_thread and self.touch_executor_thread.is_alive():
+            return
+
+        self.touch_node = Node(
+            'linkerforce_touch_feedback',
+            context=self.node.context,
+        )
+        self.left_touch_subscription = self.touch_node.create_subscription(
+            String,
+            '/cb_left_hand_matrix_touch',
+            self.touch_left_callback,
+            1,
+        )
+        self.right_touch_subscription = self.touch_node.create_subscription(
+            String,
+            '/cb_right_hand_matrix_touch',
+            self.touch_right_callback,
+            1,
+        )
+        self.touch_executor = SingleThreadedExecutor(context=self.node.context)
+        self.touch_executor.add_node(self.touch_node)
+        self.touch_executor_thread = threading.Thread(
+            target=self.touch_executor.spin,
+            daemon=True,
+        )
+        self.touch_executor_thread.start()
+
+    def _stop_touch_subscription_worker(self):
+        if self.touch_executor:
+            self.touch_executor.shutdown()
+        if self.touch_executor_thread and self.touch_executor_thread.is_alive():
+            self.touch_executor_thread.join(timeout=1.0)
+        if self.touch_node:
+            self.touch_node.destroy_node()
+        self.touch_node = None
+        self.touch_executor = None
+        self.touch_executor_thread = None
+
     def process_touch_data(self, json_str, hand_type):
+        try:
+            data = json.loads(json_str)
+            hand_result = {}
+            forcelist = []
+            # 处理每个手指的矩阵
+            for finger in ['thumb_matrix', 'index_matrix', 'middle_matrix', 'ring_matrix', 'little_matrix']:
+                matrix = np.array(data[finger])
+                # 计算接触面积（非零元素数量）
+                contact_area = np.count_nonzero(matrix)
+                # 计算总接触力
+                total_force = np.sum(matrix)
+                # 计算平均接触力（避免除以零）
+                avg_force = total_force / contact_area if contact_area > 0 else 0
+                max_force = np.max(matrix) * 4 if contact_area > 0 else 0
+                if max_force < 0:
+                    max_force = 0
+                if max_force > 500:
+                    max_force = 500
+                hand_result[finger] = {
+                    'contact_area': contact_area,
+                    'total_force': total_force,
+                    'avg_force': avg_force,
+                    'max_force': max_force
+                }
+                forcelist.append(float(max_force))
+            hand_result['forcelist'] = forcelist
+
+            with self.forcelock:
+                self.results[hand_type] = hand_result
+        except Exception as e:
+            self.node.get_logger().error("Error processing touch data: %s" % str(e))
+            return None
+
+    def _get_force_feedback_payload(self, hand_type):
         with self.forcelock:
-            try:
-                data = json.loads(json_str)    
-                self.results[hand_type] = {}
-                # 处理每个手指的矩阵
-                for finger in ['thumb_matrix', 'index_matrix', 'middle_matrix', 'ring_matrix', 'little_matrix']:
-                    matrix = np.array(data[finger])
-                    # 计算接触面积（非零元素数量）
-                    contact_area = np.count_nonzero(matrix)         
-                    # 计算总接触力
-                    total_force = np.sum(matrix)         
-                    # 计算平均接触力（避免除以零）
-                    avg_force = total_force / contact_area if contact_area > 0 else 0
-                    max_force = np.max(matrix) * 4 if contact_area > 0 else 0
-                    if max_force > 500:
-                        max_force = 500
-                    self.results[hand_type][finger] = {
-                        'contact_area': contact_area,
-                        'total_force': total_force,
-                        'avg_force': avg_force,
-                        'max_force': max_force
-                    }
-                
-            except Exception as e:
-                self.node.get_logger().error("Error processing touch data: %s" % str(e))
-                return None
+            hand_result = self.results.get(hand_type, {})
+            forcelist = hand_result.get('forcelist')
+            if forcelist is None:
+                finger_names = [
+                    'thumb_matrix',
+                    'index_matrix',
+                    'middle_matrix',
+                    'ring_matrix',
+                    'little_matrix',
+                ]
+                if not all(finger in hand_result for finger in finger_names):
+                    return None
+                forcelist = [hand_result[finger]['max_force'] for finger in finger_names]
+            return [float(value) for value in forcelist]
+
+    def _send_force_feedback_once(self, hand_type):
+        reader = getattr(self, f"force_reader_{hand_type}", None)
+        if reader is None or getattr(reader, "serial_port", None) is None:
+            return False
+
+        forcelist = self._get_force_feedback_payload(hand_type)
+        if not forcelist:
+            return False
+
+        try:
+            reader.forcelist = forcelist
+            write_force_feedback = getattr(reader, "write_force_feedback", None)
+            if write_force_feedback:
+                write_force_feedback()
+            else:
+                reader.serial_port.write(reader.pack_04_data())
+            if hand_type == 'right':
+                self.debug_last_force04_r = list(forcelist)
+            elif hand_type == 'left':
+                self.debug_last_force04_l = list(forcelist)
+            return True
+        except Exception as e:
+            self.node.get_logger().warn(f"{hand_type} 力反馈发送失败: {e}")
+            return False
+
+    def _force_feedback_loop(self):
+        while self.force_feedback_running.is_set():
+            self._send_force_feedback_once('left')
+            self._send_force_feedback_once('right')
+            time.sleep(self.force_feedback_thread_interval)
+
+    def _start_force_feedback_worker(self):
+        if self.force_feedback_thread and self.force_feedback_thread.is_alive():
+            return
+        self.force_feedback_running.set()
+        self.force_feedback_thread = threading.Thread(
+            target=self._force_feedback_loop,
+            daemon=True,
+        )
+        self.force_feedback_thread.start()
+
+    def _stop_force_feedback_worker(self):
+        self.force_feedback_running.clear()
+        if self.force_feedback_thread and self.force_feedback_thread.is_alive():
+            self.force_feedback_thread.join(timeout=1.0)
+        self.force_feedback_thread = None
 
     def _capture_o6_right_pinky_raw_jump(self, right_positions, left_valid=False, right_valid=True):
         if not getattr(self, "debug_enabled", False) or getattr(self.righthandtype, "name", self.righthandtype) != "o6":
             return None
         if not right_valid or right_positions is None or len(right_positions) <= 20:
             return None
-
-        def fmt(values):
-            return "[" + ", ".join(f"{value:.6f}" for value in values) + "]"
 
         indices = [18, 19, 20]
         current = [float(right_positions[index]) for index in indices]
@@ -342,48 +456,58 @@ class Retarget():
             "right_valid": right_valid,
             "glove_version": glove_version,
         }
-        self.node.get_logger().warn(
-            "[O6右手小指根部原始数据跟踪] "
-            f"is_jump={is_jump}, "
-            f"raw_idx={indices}, "
-            f"raw_prev={fmt(previous) if previous is not None else 'None'}, "
-            f"raw_curr={fmt(current)}, "
-            f"raw_delta={fmt(deltas)}, "
-            f"max_idx={indices[max_local_index]}, "
-            f"max_delta={max_delta:.6f}, "
-            f"threshold={threshold}, "
-            f"left_valid={left_valid}, right_valid={right_valid}, "
-            f"glove_version={glove_version}"
-        )
         return trace
 
-    def _trace_o6_right_publish_before_topic(self, raw_jump_trace, msg_r):
+    def _trace_o6_right_publish_frame_rate(self, raw_jump_trace):
         if not raw_jump_trace:
             return
 
-        def fmt(values):
-            return "[" + ", ".join(f"{float(value):.6f}" for value in values) + "]"
+        now = time.monotonic()
+        interval = float(getattr(self, "debug_o6_publish_rate_interval", 1.0) or 1.0)
+        if interval <= 0:
+            interval = 1.0
 
-        position = list(getattr(msg_r, "position", []))
-        velocity = list(getattr(msg_r, "velocity", []))
-        pinky_motor = position[5] if len(position) > 5 else None
-        pinky_velocity = velocity[5] if len(velocity) > 5 else None
-        pinky_motor_text = "None" if pinky_motor is None else f"{float(pinky_motor):.6f}"
-        pinky_velocity_text = "None" if pinky_velocity is None else f"{float(pinky_velocity):.6f}"
+        if getattr(self, "debug_o6_publish_rate_start_time", None) is None:
+            self.debug_o6_publish_rate_start_time = now
+            self.debug_o6_publish_rate_last_time = now
+            self.debug_o6_publish_rate_total_count = 0
+            self.debug_o6_publish_rate_window_count = 0
 
-        self.node.get_logger().warn(
-            "[O6右手小指根部发布前跟踪] "
-            f"pub_count={getattr(self, 'pubprintcount', None)}, "
-            f"is_jump={raw_jump_trace.get('is_jump')}, "
-            f"raw_idx={raw_jump_trace['raw_indices']}, "
-            f"raw_delta={fmt(raw_jump_trace['raw_delta'])}, "
-            f"max_idx={raw_jump_trace['max_index']}, "
-            f"max_delta={raw_jump_trace['max_delta']:.6f}, "
-            f"publish_position={fmt(position)}, "
-            f"publish_velocity={fmt(velocity)}, "
-            f"pinky_motor={pinky_motor_text}, "
-            f"pinky_velocity={pinky_velocity_text}"
+        self.debug_o6_publish_rate_total_count += 1
+        self.debug_o6_publish_rate_window_count += 1
+
+        last_time = getattr(self, "debug_o6_publish_rate_last_time", now)
+        elapsed = now - last_time
+        if elapsed < interval:
+            return
+
+        window_frames = self.debug_o6_publish_rate_window_count
+        total_elapsed = now - self.debug_o6_publish_rate_start_time
+        fps = window_frames / elapsed if elapsed > 0 else 0.0
+        avg_fps = (
+            self.debug_o6_publish_rate_total_count / total_elapsed
+            if total_elapsed > 0
+            else 0.0
         )
+        force04 = getattr(self, "debug_last_force04_r", None)
+        force04_text = (
+            "None"
+            if not force04
+            else "[" + ", ".join(f"{float(value):.2f}" for value in force04) + "]"
+        )
+
+        self.node.get_logger().info(
+            "[O6右手发布帧率跟踪] "
+            f"pub_count={getattr(self, 'pubprintcount', None)}, "
+            f"window_frames={window_frames}, "
+            f"total_frames={self.debug_o6_publish_rate_total_count}, "
+            f"elapsed={elapsed:.3f}s, "
+            f"fps={fps:.2f}Hz, "
+            f"avg_fps={avg_fps:.2f}Hz, "
+            f"force04={force04_text}"
+        )
+        self.debug_o6_publish_rate_last_time = now
+        self.debug_o6_publish_rate_window_count = 0
 
     def linkerforce_init(self):
         # 从配置读取串口参数
@@ -728,17 +852,6 @@ class Retarget():
             
             self.lefthand.joint_update(left_positions)
             self.lefthand.speed_update()
-            if left_valid:
-                with self.forcelock:
-                    if self.results['left']:
-                        self.force_reader_left.forcelist = [
-                                self.results['left']['thumb_matrix']['max_force'],
-                                self.results['left']['index_matrix']['max_force'],
-                                self.results['left']['middle_matrix']['max_force'],
-                                self.results['left']['ring_matrix']['max_force'],
-                                self.results['left']['little_matrix']['max_force']
-                            ]
-                        self.force_reader_left.serial_port.write(self.force_reader_left.pack_04_data())
             if self.lefthandpubprint and self.pubprintcount % 5 == 0:
                 print(f"左手位置: {self.lefthand.g_jointpositions}")
             msg_l = JointState()
@@ -772,26 +885,16 @@ class Retarget():
             )
             self.righthand.joint_update(right_positions)
             self.righthand.speed_update()
-            if right_valid:
-                with self.forcelock:
-                    if self.results['right']:
-                        self.force_reader_right.forcelist = [
-                                self.results['right']['thumb_matrix']['max_force'],
-                                self.results['right']['index_matrix']['max_force'],
-                                self.results['right']['middle_matrix']['max_force'],
-                                self.results['right']['ring_matrix']['max_force'],
-                                self.results['right']['little_matrix']['max_force']
-                            ]
-                        self.force_reader_right.serial_port.write(self.force_reader_right.pack_04_data())
             if self.righthandpubprint and self.pubprintcount % 5 == 0:
                 print(f"右手位置: {self.righthand.g_jointpositions}")
-
+            # print( self.debug_last_force04_r )
             msg_r = JointState()
             msg_r.header.stamp = self.node.get_clock().now().to_msg()
             msg_r.name = self._joint_names_for(self.righthand)
             msg_r.position = [float(num) for num in self.righthand.g_jointpositions]
-            msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
-            self._trace_o6_right_publish_before_topic(o6_pinky_raw_jump_trace, msg_r)
+            # msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
+            self._trace_o6_right_publish_frame_rate(o6_pinky_raw_jump_trace)
+
             self.publisher_r.publish(msg_r)
 
             if self.isdebugpub:
@@ -1416,12 +1519,20 @@ class Retarget():
                 self.node.get_logger().error("标定失败，退出程序")
                 return False
             self.calibration = -1
-        self.node.create_timer(1.0/30, self.process_callback)  # 30Hz
+        self._start_touch_subscription_worker()
+        self._start_force_feedback_worker()
+        self.node.create_timer(
+            1.0/30,
+            self.process_callback,
+            callback_group=self.retarget_callback_group,
+        )  # 30Hz
         return True
 
     def stop_serial_threads(self):
         """停止串口线程，在 destroy_node 时调用"""
         self.runing = False
+        self._stop_touch_subscription_worker()
+        self._stop_force_feedback_worker()
         if self.force_reader_left:
             self.force_reader_left.stop()
         if self.force_reader_right:
