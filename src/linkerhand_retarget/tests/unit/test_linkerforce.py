@@ -1,6 +1,7 @@
 import pytest
 import array
 import struct
+import threading
 from linkerhand_retarget.linkerhand.constants import HandType
 from linkerhand_retarget.linkerhand.linkerforce import (
     CircularBuffer,
@@ -226,6 +227,38 @@ class TestSerialConnectionClose:
         connection._run(None, None)
 
         assert messages == []
+
+    def test_run_stops_without_read_error_log_on_bad_file_descriptor(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        messages = []
+
+        class FakeLogger:
+            def log(self, level, message):
+                messages.append((level, message))
+
+        class BadFileDescriptorPort:
+            @property
+            def in_waiting(self):
+                raise OSError(9, "Bad file descriptor")
+
+        connection = SerialConnection(logger=FakeLogger(), isdebug=True)
+        connection.serial_port = BadFileDescriptorPort()
+        connection.running.set()
+
+        thread = threading.Thread(target=connection._run, args=(None, None), daemon=True)
+        thread.start()
+        thread.join(timeout=0.2)
+        was_alive = thread.is_alive()
+        connection.running.clear()
+        thread.join(timeout=0.2)
+
+        assert not was_alive
+        assert messages == []
+        assert not connection.running.is_set()
 
     def test_sync_version_query_stops_after_first_success(self, monkeypatch):
         monkeypatch.setattr(

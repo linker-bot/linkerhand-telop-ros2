@@ -426,6 +426,30 @@ class SerialConnection:
     def stop(self) -> None:
         self.close()
 
+    @staticmethod
+    def _is_bad_file_descriptor_error(error: Exception) -> bool:
+        if getattr(error, "errno", None) == 9:
+            return True
+
+        error_text = str(error)
+        return "[Errno 9]" in error_text or "Bad file descriptor" in error_text
+
+    def _handle_terminal_serial_error(self) -> None:
+        self.running.clear()
+        serial_port = self.serial_port
+        self.serial_port = None
+
+        if serial_port and getattr(serial_port, "is_open", False):
+            try:
+                serial_port.close()
+            except (OSError, serial.SerialException):
+                pass
+
+        if not self._disconnect_warned:
+            self._disconnect_warned = True
+            if self._on_disconnect:
+                self._on_disconnect()
+
     def _run(self, data_callback: Callable[[array.array], None], 
              query_callback: Callable[[], Optional[bytes]]) -> None:
         parser = FrameParser()
@@ -481,6 +505,9 @@ class SerialConnection:
 
             except Exception as e:
                 if not self.running.is_set():
+                    break
+                if self._is_bad_file_descriptor_error(e):
+                    self._handle_terminal_serial_error()
                     break
                 if self.logger and self.isdebug:
                     self.logger.log('error', f"串口读取错误: {e}")
