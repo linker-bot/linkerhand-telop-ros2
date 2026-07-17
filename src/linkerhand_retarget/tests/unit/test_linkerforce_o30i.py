@@ -126,7 +126,7 @@ def test_o30i_control_output_uses_local_urdf_normalization(hand_class_name, monk
 
     assert tuple(getattr(hand, "topic_joint_names", ())) == O30I_EXPECTED_TOPIC_NAMES
     assert hand.g_jointpositions[0] == 255
-    assert hand.g_jointpositions[1] == 0
+    assert hand.g_jointpositions[1] == 255
     assert hand.g_jointpositions[2:6] == [217, 151, 159, 159]
     assert hand.g_jointpositions[6:] == [0] * 14
 
@@ -148,10 +148,28 @@ def test_o30i_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
     hand._set_g_jointpositions_from_arc()
 
     assert hand.g_jointpositions[0] == 0
-    assert hand.g_jointpositions[1] == 255
+    assert hand.g_jointpositions[1] == 0
     assert hand.g_jointpositions[2:6] == [255, 255, 255, 255]
     assert hand.g_jointpositions[6] == 255
     assert hand.g_jointpositions[7:20] == [255] * 13
+
+
+@pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
+def test_o30i_thumb_cmc_yaw_motor_output_reverses_physical_direction(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+
+    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand.smooth_enabled = False
+
+    hand.g_jointpositions_arc = [0.0] * 20
+    hand.g_jointpositions_arc[1] = 0.0
+    hand._set_g_jointpositions_from_arc()
+    assert hand.g_jointpositions[1] == 255
+
+    hand.g_jointpositions_arc = [0.0] * 20
+    hand.g_jointpositions_arc[1] = 1.63
+    hand._set_g_jointpositions_from_arc()
+    assert hand.g_jointpositions[1] == 0
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
