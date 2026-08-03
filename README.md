@@ -12,7 +12,7 @@ This repository contains the standalone ROS2 source workspace for LinkerHand tel
 - Robot model assets
 - Offline unit tests and integration test examples
 
-Current SDK version: `2.12.6`. See [VERSION.md](VERSION.md) for release notes.
+Current SDK version: `2.12.7`. See [VERSION.md](VERSION.md) for release notes.
 
 <p style="color: #b7791f;"><em>Warning: This release uses a source-workspace delivery path. After <code>colcon build --symlink-install</code>, configuration and robot model assets are still read from the package source tree, so keep the workspace layout shown below. Wheel-style installation or copying only the <code>install/</code> directory is not supported for this release.</em></p>
 

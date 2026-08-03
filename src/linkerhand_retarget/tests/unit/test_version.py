@@ -49,7 +49,7 @@ def test_get_version_falls_back_to_package_version(tmp_path):
 
     missing_file = tmp_path / "missing_VERSION.md"
 
-    assert get_version(version_file=missing_file) == "2.12.6"
+    assert get_version(version_file=missing_file) == "2.12.7"
 
 
 def test_find_version_file_uses_repository_root():

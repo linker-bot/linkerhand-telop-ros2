@@ -127,13 +127,13 @@ MAPPING_ORDER = [
 MULTI_SEGMENT_CONFIG = {
     'states': [
         'original', 
-        'opose'
-        # 'fist'
+        # 'opose',
+        'fist'
         ],
     'state_names': {
         'original': '张手',
-        'opose': 'O手势'
-        # 'fist': '握拳'
+        # 'opose': 'O手势',
+        'fist': '握拳'
     }
 }
 MULTI_SEGMENT_CONFIG_FROZEN = tuple(MULTI_SEGMENT_CONFIG['states'])
