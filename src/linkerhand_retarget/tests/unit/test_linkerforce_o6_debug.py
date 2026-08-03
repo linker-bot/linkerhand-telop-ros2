@@ -77,7 +77,7 @@ def test_o6_right_pinky_trace_captures_raw_poslist_without_verbose_warning(monke
     assert warnings == []
 
 
-def test_o6_right_publish_trace_logs_frame_rate_without_payload_details(monkeypatch):
+def test_o6_right_publish_trace_does_not_log_frame_rate(monkeypatch):
     def install_ros_stubs():
         rclpy = types.ModuleType("rclpy")
         rclpy_node = types.ModuleType("rclpy.node")
@@ -147,12 +147,79 @@ def test_o6_right_publish_trace_logs_frame_rate_without_payload_details(monkeypa
     retarget._trace_o6_right_publish_frame_rate(trace)
     retarget._trace_o6_right_publish_frame_rate(trace)
 
-    assert len(infos) == 1
-    assert "[O6右手发布帧率跟踪]" in infos[0]
-    assert "pub_count=12" in infos[0]
-    assert "window_frames=3" in infos[0]
-    assert "elapsed=1.200s" in infos[0]
-    assert "fps=2.50Hz" in infos[0]
-    assert "force04=[10.00, 20.00, 30.00, 40.00, 50.00]" in infos[0]
-    assert "publish_position" not in infos[0]
-    assert "pinky_motor" not in infos[0]
+    assert infos == []
+
+
+def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch):
+    def install_ros_stubs():
+        rclpy = types.ModuleType("rclpy")
+        rclpy_node = types.ModuleType("rclpy.node")
+        rclpy_node.Node = type("Node", (), {})
+        sensor_msgs = types.ModuleType("sensor_msgs")
+        sensor_msgs_msg = types.ModuleType("sensor_msgs.msg")
+        sensor_msgs_msg.JointState = type("JointState", (), {})
+        std_msgs = types.ModuleType("std_msgs")
+        std_msgs_msg = types.ModuleType("std_msgs.msg")
+        for name in (
+            "String",
+            "Int32MultiArray",
+            "Header",
+            "Float32MultiArray",
+            "MultiArrayLayout",
+            "MultiArrayDimension",
+        ):
+            setattr(std_msgs_msg, name, type(name, (), {}))
+
+        monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+        monkeypatch.setitem(sys.modules, "rclpy.node", rclpy_node)
+        monkeypatch.setitem(sys.modules, "sensor_msgs", sensor_msgs)
+        monkeypatch.setitem(sys.modules, "sensor_msgs.msg", sensor_msgs_msg)
+        monkeypatch.setitem(sys.modules, "std_msgs", std_msgs)
+        monkeypatch.setitem(sys.modules, "std_msgs.msg", std_msgs_msg)
+
+    install_ros_stubs()
+
+    from linkerhand_retarget.motion.linkerforce.retarget import Retarget
+
+    warnings = []
+
+    class FakeLogger:
+        def warn(self, msg):
+            warnings.append(msg)
+
+    retarget = Retarget.__new__(Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
+    retarget.debug_enabled = True
+    retarget.debug_endpoint_jump_tolerance = 0.5
+
+    previous_raw = [1.0, 2.0, 3.0]
+    current_raw = [4.0, 5.0, 6.0]
+    next_raw = [7.0, 8.0, 9.0]
+
+    retarget._trace_endpoint_motor_jump(
+        "right",
+        previous_raw,
+        [255.0, 10.0],
+    )
+    retarget._trace_endpoint_motor_jump(
+        "right",
+        current_raw,
+        [0.0, 10.0],
+    )
+    retarget._trace_endpoint_motor_jump(
+        "right",
+        next_raw,
+        [255.0, 10.0],
+    )
+
+    assert len(warnings) == 2
+    assert "方向=255->0" in warnings[0]
+    assert "方向=0->255" in warnings[1]
+    assert "prev=255.000000" in warnings[0]
+    assert "current=0.000000" in warnings[0]
+    assert "motor_previous=" not in warnings[0]
+    assert "motor_current=" not in warnings[0]
+    assert "raw_previous=[1.0, 2.0, 3.0]" in warnings[0]
+    assert "raw_current=[4.0, 5.0, 6.0]" in warnings[0]
+    assert "raw_previous=[4.0, 5.0, 6.0]" in warnings[1]
+    assert "raw_current=[7.0, 8.0, 9.0]" in warnings[1]

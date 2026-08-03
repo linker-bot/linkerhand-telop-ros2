@@ -269,6 +269,12 @@ class Retarget():
         self.debug_last_raw_l = [0.0] * 21
         self.debug_last_raw_r = [0.0] * 21
         self.debug_last_o6_pinky_raw_r = None
+        self.debug_endpoint_jump_tolerance = 0.5
+        self.debug_last_endpoint_motor_l = None
+        self.debug_last_endpoint_motor_r = None
+        self.debug_last_endpoint_raw_l = None
+        self.debug_last_endpoint_raw_r = None
+        self.debug_o6_publish_rate_enabled = False
         self.debug_o6_publish_rate_interval = 1.0
         self.debug_o6_publish_rate_start_time = None
         self.debug_o6_publish_rate_last_time = None
@@ -470,7 +476,54 @@ class Retarget():
         }
         return trace
 
+    def _trace_endpoint_motor_jump(self, hand_type, raw_positions, motor_positions):
+        if not getattr(self, "debug_enabled", False):
+            return
+        if hand_type not in ("left", "right") or raw_positions is None or motor_positions is None:
+            return
+
+        try:
+            current_motor = [float(value) for value in motor_positions]
+            current_raw = [float(value) for value in raw_positions]
+        except (TypeError, ValueError):
+            return
+        if not current_motor:
+            return
+
+        side = "l" if hand_type == "left" else "r"
+        previous_motor = getattr(self, f"debug_last_endpoint_motor_{side}", None)
+        previous_raw = getattr(self, f"debug_last_endpoint_raw_{side}", None)
+        setattr(self, f"debug_last_endpoint_motor_{side}", current_motor)
+        setattr(self, f"debug_last_endpoint_raw_{side}", current_raw)
+
+        if previous_motor is None or len(previous_motor) != len(current_motor):
+            return
+
+        tolerance = float(getattr(self, "debug_endpoint_jump_tolerance", 0.5) or 0.5)
+        hand_name = "左手" if hand_type == "left" else "右手"
+        for index, (previous, current) in enumerate(zip(previous_motor, current_motor)):
+            direction = None
+            if previous >= 255.0 - tolerance and current <= tolerance:
+                direction = "255->0"
+            elif previous <= tolerance and current >= 255.0 - tolerance:
+                direction = "0->255"
+            if direction is None:
+                continue
+
+            self.node.get_logger().warn(
+                f"[LinkerForce{hand_name}电机端点跳变] "
+                f"timestamp={datetime.now().isoformat()}, "
+                f"idx={index}, "
+                f"prev={previous:.6f}, "
+                f"current={current:.6f}, "
+                f"方向={direction}, "
+                f"raw_previous={previous_raw}, "
+                f"raw_current={current_raw}"
+            )
+
     def _trace_o6_right_publish_frame_rate(self, raw_jump_trace):
+        if not getattr(self, "debug_o6_publish_rate_enabled", False):
+            return
         if not raw_jump_trace:
             return
 
@@ -870,6 +923,11 @@ class Retarget():
             msg_l.header.stamp = self.node.get_clock().now().to_msg()
             msg_l.name = self._joint_names_for(self.lefthand)
             msg_l.position = [float(num) for num in self.lefthand.g_jointpositions]
+            self._trace_endpoint_motor_jump(
+                "left",
+                left_positions,
+                msg_l.position,
+            )
             self.publisher_l.publish(msg_l)
 
             if self.isdebugpub:
@@ -905,6 +963,11 @@ class Retarget():
             msg_r.name = self._joint_names_for(self.righthand)
             msg_r.position = [float(num) for num in self.righthand.g_jointpositions]
             # msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
+            self._trace_endpoint_motor_jump(
+                "right",
+                right_positions,
+                msg_r.position,
+            )
             self._trace_o6_right_publish_frame_rate(o6_pinky_raw_jump_trace)
 
             self.publisher_r.publish(msg_r)
