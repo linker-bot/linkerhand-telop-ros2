@@ -41,7 +41,7 @@ serial:
     port: /dev/ttyUSB0
   right:
     baudrate: 2000000
-    port: /dev/ttyUSB0
+    port: /dev/ttyUSB1
   serial_debug: true
 system:
   can:
@@ -54,8 +54,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: o20
-  robotname_r: o20
+  robotname_l: o6
+  robotname_r: o6
   sapientype: left
   usecan: false
   usegui: false

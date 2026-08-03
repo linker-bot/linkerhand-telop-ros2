@@ -8,6 +8,8 @@ import serial
 import serial.tools.list_ports
 from threading import Thread, Event
 from enum import Enum
+from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Optional, Callable, Any, Set
 from .constants import HandType
 
@@ -28,6 +30,11 @@ class CommandCode(Enum):
 BUFFER_SIZE = 1024
 MAX_FRAME_DATA_SIZE = 255
 FRAME_HEADER = 0x5D
+POSITION_JOINT_COUNT = 21
+RIGHT_PINKY_END_JUMP_INDEX = 20
+RIGHT_PINKY_TRACE_INDICES = (18, 19, 20)
+RIGHT_PINKY_END_JUMP_THRESHOLD_RAD = 0.35
+PINKY_JUMP_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "tmp" / "right_pinky_end_jump.log"
 
 # 时序常量
 WARMUP_DELAY = 0.15
@@ -213,6 +220,7 @@ class FrameHandler:
         self._poslist: List[float] = [0.0] * 21
         self._forcelist: List[float] = [0.0] * 5
         self._realforcelist: List[int] = [0] * 5
+        self._last_right_pinky_position_frame: Optional[List[float]] = None
 
     @property
     def poslist(self) -> List[float]:
@@ -281,19 +289,73 @@ class FrameHandler:
             if self.logger:
                 self.logger.log('warn', f"Invalid position data length: {len(frame_data)}")
             return None
+        channel_count = len(frame_data) // 4
+        if channel_count != POSITION_JOINT_COUNT:
+            if self.logger:
+                self.logger.log(
+                    'warn',
+                    f"Invalid position channel count: {channel_count}, expected {POSITION_JOINT_COUNT}"
+                )
+            return None
         floats: List[float] = []
-        for i in range(len(frame_data) // 4):
+        for i in range(channel_count):
             try:
                 val = struct.unpack('<f', frame_data[i*4:(i+1)*4])[0]
                 floats.append(np.deg2rad(val))
             except struct.error as e:
                 if self.logger:
                     self.logger.log('warn', f"Unpack error: {e}")
+                return None
+        if not all(np.isfinite(value) for value in floats):
+            if self.logger:
+                self.logger.log('warn', "Invalid position data: contains non-finite value")
+            return None
+        self._trace_right_pinky_end_jump(floats, source='0xA3' if is_a3 else '0x03')
         self.poslist = floats
         result: Dict[str, Any] = {'poslist': floats}
         if is_a3:
             result['a6count'] = True
         return result
+
+    def _trace_right_pinky_end_jump(self, floats: List[float], source: str) -> None:
+        if self._handtype != HandType.right or len(floats) <= RIGHT_PINKY_END_JUMP_INDEX:
+            return
+
+        previous = self._last_right_pinky_position_frame
+        self._last_right_pinky_position_frame = list(floats)
+        if previous is None or len(previous) <= RIGHT_PINKY_END_JUMP_INDEX:
+            return
+
+        current_value = floats[RIGHT_PINKY_END_JUMP_INDEX]
+        previous_value = previous[RIGHT_PINKY_END_JUMP_INDEX]
+        delta = current_value - previous_value
+        if abs(delta) < RIGHT_PINKY_END_JUMP_THRESHOLD_RAD:
+            return
+
+        previous_trace = [previous[index] for index in RIGHT_PINKY_TRACE_INDICES]
+        current_trace = [floats[index] for index in RIGHT_PINKY_TRACE_INDICES]
+        delta_trace = [current - prev for current, prev in zip(current_trace, previous_trace)]
+        self._append_pinky_jump_log(
+            "[LinkerForce右手小指末端原始数据跳变] "
+            f"timestamp={datetime.now().isoformat()}, "
+            f"source={source}, "
+            f"idx={RIGHT_PINKY_END_JUMP_INDEX}, "
+            f"prev={previous_value:.6f}, "
+            f"current={current_value:.6f}, "
+            f"delta={delta:.6f}, "
+            f"threshold={RIGHT_PINKY_END_JUMP_THRESHOLD_RAD:.6f}, "
+            f"raw18_19_20_prev={[round(value, 6) for value in previous_trace]}, "
+            f"raw18_19_20_current={[round(value, 6) for value in current_trace]}, "
+            f"raw18_19_20_delta={[round(value, 6) for value in delta_trace]}"
+        )
+
+    def _append_pinky_jump_log(self, message: str) -> None:
+        try:
+            PINKY_JUMP_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with PINKY_JUMP_LOG_FILE_PATH.open("a", encoding="utf-8") as file:
+                file.write(message + "\n")
+        except OSError:
+            return
 
     def _handle_force(self, frame_data: array.array) -> Optional[Dict[str, Any]]:
         if len(frame_data) % 2 != 0:
@@ -316,14 +378,23 @@ class FrameHandler:
             if self.logger:
                 self.logger.log('warn', f"Invalid a6 data length: {len(frame_data)}")
             return None
+        channel_count = len(frame_data) // 2
+        if channel_count != POSITION_JOINT_COUNT:
+            if self.logger:
+                self.logger.log(
+                    'warn',
+                    f"Invalid a6 position channel count: {channel_count}, expected {POSITION_JOINT_COUNT}"
+                )
+            return None
         floats: List[float] = []
-        for i in range(len(frame_data) // 2):
+        for i in range(channel_count):
             try:
                 val = struct.unpack('<h', frame_data[i*2:(i+1)*2])[0]
                 floats.append(np.deg2rad(val / 100))
             except struct.error as e:
                 if self.logger:
                     self.logger.log('warn', f"Unpack error: {e}")
+                return None
         self.poslist = floats
         return {'poslist': floats, 'force_response': True}
 
@@ -378,6 +449,7 @@ class SerialConnection:
         self._disconnect_warned = False
         self._on_disconnect: Optional[Callable[[], None]] = None
         self._on_reconnect: Optional[Callable[[], None]] = None
+        self._write_callback: Optional[Callable[[bytes], bool]] = None
 
     def open(self, port: str, baudrate: int) -> bool:
         try:
@@ -417,9 +489,11 @@ class SerialConnection:
             self.thread.join(timeout=1.0)
 
     def start(self, data_callback: Callable[[array.array], None], 
-              query_callback: Callable[[], Optional[bytes]]) -> None:
+              query_callback: Callable[[], Optional[bytes]],
+              write_callback: Optional[Callable[[bytes], bool]] = None) -> None:
         if self.thread and self.thread.is_alive():
             return
+        self._write_callback = write_callback
         self.running.set()
         self.thread = Thread(target=self._run, args=(data_callback, query_callback), daemon=True)
         self.thread.start()
@@ -498,8 +572,12 @@ class SerialConnection:
                     sendcount += 1
                     if sendcount > QUERY_INTERVAL:
                         query_data = query_callback()
-                        if query_data and self.serial_port:
-                            self.serial_port.write(query_data)
+                        if query_data:
+                            write_callback = self._write_callback
+                            if write_callback:
+                                write_callback(query_data)
+                            elif self.serial_port:
+                                self.serial_port.write(query_data)
                         sendcount = 0
 
                 time.sleep(READ_INTERVAL)
@@ -732,7 +810,7 @@ class ForceSerialReader:
         return result
 
     def start(self) -> None:
-        self._connection.start(self._on_data_received, self._get_query_data)
+        self._connection.start(self._on_data_received, self._get_query_data, self._write_serial)
 
     def stop(self) -> None:
         self._connection.stop()
@@ -767,6 +845,9 @@ class ForceSerialReader:
 
     def write_force_feedback(self) -> bool:
         return self._write_serial(self.pack_04_data())
+
+    def write_packet(self, data: bytes) -> bool:
+        return self._write_serial(data)
 
     def set_reconnect_callback(self, callback: Callable[[], None]) -> None:
         self._connection.set_reconnect_callback(callback)

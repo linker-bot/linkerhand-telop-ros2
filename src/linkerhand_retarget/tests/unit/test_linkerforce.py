@@ -1,7 +1,9 @@
 import pytest
 import array
+import math
 import struct
 import threading
+from pathlib import Path
 from linkerhand_retarget.linkerhand.constants import HandType
 from linkerhand_retarget.linkerhand.linkerforce import (
     CircularBuffer,
@@ -13,6 +15,7 @@ from linkerhand_retarget.linkerhand.linkerforce import (
     SerialConnection,
     BUFFER_SIZE,
     FRAME_HEADER,
+    PINKY_JUMP_LOG_FILE_PATH,
     VERSION_QUERY_RETRY_COUNT,
 )
 
@@ -116,6 +119,107 @@ class TestFrameParser:
         frame2 = [FRAME_HEADER, 0x02, 0x01, 0xCC]
         for byte in frame2:
             parser.process_byte(byte)
+
+
+class TestFrameHandlerPositionFrames:
+    @staticmethod
+    def _position_payload(degrees):
+        return array.array("B", struct.pack("<21f", *degrees))
+
+    def test_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
+        handler = FrameHandler(HandType.right)
+        previous = [42.0] * 21
+        handler.poslist = previous
+        payload = array.array("B", struct.pack("<20f", *range(20)))
+
+        result = handler._handle_position(payload)
+
+        assert result is None
+        assert handler.poslist == previous
+
+    def test_position_frame_rejects_non_finite_values_without_overwriting_poslist(self):
+        handler = FrameHandler(HandType.right)
+        previous = [42.0] * 21
+        handler.poslist = previous
+        values = [0.0] * 20 + [math.nan]
+        payload = array.array("B", struct.pack("<21f", *values))
+
+        result = handler._handle_position(payload)
+
+        assert result is None
+        assert handler.poslist == previous
+
+    def test_a6_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
+        handler = FrameHandler(HandType.right)
+        previous = [42.0] * 21
+        handler.poslist = previous
+        payload = array.array("B", struct.pack("<5h", *range(5)))
+
+        result = handler._handle_a6_position(payload)
+
+        assert result is None
+        assert handler.poslist == previous
+
+    def test_a6_position_frame_accepts_21_channel_payload(self):
+        handler = FrameHandler(HandType.right)
+        values = list(range(21))
+        payload = array.array("B", struct.pack("<21h", *values))
+
+        result = handler._handle_a6_position(payload)
+
+        assert result == {"poslist": handler.poslist, "force_response": True}
+        assert len(handler.poslist) == 21
+
+    def test_right_pinky_end_jump_records_raw_position_context_to_log_file(self, monkeypatch, tmp_path):
+        messages = []
+        log_file = tmp_path / "pinky_jump.log"
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.PINKY_JUMP_LOG_FILE_PATH",
+            log_file,
+        )
+
+        class FakeLogger:
+            def log(self, level, message):
+                messages.append((level, message))
+
+        handler = FrameHandler(HandType.right, logger=FakeLogger())
+        first = [0.0] * 21
+        second = first.copy()
+        second[20] = 30.0
+
+        assert handler._handle_position(self._position_payload(first)) is not None
+        assert messages == []
+
+        assert handler._handle_position(self._position_payload(second)) is not None
+
+        assert messages == []
+        message = log_file.read_text(encoding="utf-8")
+        assert "右手小指末端原始数据跳变" in message
+        assert "source=0x03" in message
+        assert "idx=20" in message
+        assert "raw18_19_20" in message
+
+    def test_default_pinky_jump_log_path_is_under_linkerforce_tmp(self):
+        assert isinstance(PINKY_JUMP_LOG_FILE_PATH, Path)
+        assert PINKY_JUMP_LOG_FILE_PATH.name == "right_pinky_end_jump.log"
+        assert PINKY_JUMP_LOG_FILE_PATH.parent.name == "tmp"
+
+    def test_left_pinky_end_jump_does_not_log_right_hand_trace(self):
+        messages = []
+
+        class FakeLogger:
+            def log(self, level, message):
+                messages.append((level, message))
+
+        handler = FrameHandler(HandType.left, logger=FakeLogger())
+        first = [0.0] * 21
+        second = first.copy()
+        second[20] = 30.0
+
+        handler._handle_position(self._position_payload(first))
+        handler._handle_position(self._position_payload(second))
+
+        assert messages == []
 
 
 class TestConstants:
@@ -278,6 +382,41 @@ class TestSerialConnectionClose:
         assert not was_alive
         assert messages == []
 
+    def test_run_writes_query_data_through_configured_writer(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.QUERY_INTERVAL",
+            0,
+        )
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        events = []
+        connection = SerialConnection()
+
+        class FakeSerialPort:
+            @property
+            def in_waiting(self):
+                return 0
+
+            def write(self, data):
+                events.append(("direct", data))
+                connection.running.clear()
+
+        def locked_writer(data):
+            events.append(("locked", data))
+            connection.running.clear()
+            return True
+
+        connection.serial_port = FakeSerialPort()
+        connection.running.set()
+        connection._write_callback = locked_writer
+
+        connection._run(None, lambda: b"query")
+
+        assert events == [("locked", b"query")]
+
 
 class TestForceSerialReaderWrites:
     def test_query_serial_port_requests_exclusive_serial_access(self, monkeypatch):
@@ -344,6 +483,28 @@ class TestForceSerialReaderWrites:
 
         assert reader.write_force_feedback() is True
         assert events == ["lock_enter", ("write", b"force"), "lock_exit"]
+
+    def test_write_packet_uses_reader_write_lock(self):
+        events = []
+
+        class TrackingLock:
+            def __enter__(self):
+                events.append("lock_enter")
+
+            def __exit__(self, _exc_type, _exc, _traceback):
+                events.append("lock_exit")
+                return False
+
+        class FakeSerialPort:
+            def write(self, data):
+                events.append(("write", data))
+
+        reader = ForceSerialReader(HandType.right)
+        reader.serial_port = FakeSerialPort()
+        reader._serial_write_lock = TrackingLock()
+
+        assert reader.write_packet(b"version") is True
+        assert events == ["lock_enter", ("write", b"version"), "lock_exit"]
 
     def test_sync_version_query_stops_after_first_success(self, monkeypatch):
         monkeypatch.setattr(

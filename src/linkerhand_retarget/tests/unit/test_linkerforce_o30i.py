@@ -125,8 +125,8 @@ def test_o30i_control_output_uses_local_urdf_normalization(hand_class_name, monk
     hand.joint_update([0.0] * 21)
 
     assert tuple(getattr(hand, "topic_joint_names", ())) == O30I_EXPECTED_TOPIC_NAMES
-    assert hand.g_jointpositions[0] == 255
-    assert hand.g_jointpositions[1] == 255
+    assert hand.g_jointpositions[0] == 0
+    assert hand.g_jointpositions[1] == 0
     assert hand.g_jointpositions[2:6] == [217, 151, 159, 159]
     assert hand.g_jointpositions[6:] == [0] * 14
 
@@ -147,40 +147,39 @@ def test_o30i_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
     ]
     hand._set_g_jointpositions_from_arc()
 
-    assert hand.g_jointpositions[0] == 0
-    assert hand.g_jointpositions[1] == 0
+    assert hand.g_jointpositions[0] == 255
+    assert hand.g_jointpositions[1] == 255
     assert hand.g_jointpositions[2:6] == [255, 255, 255, 255]
     assert hand.g_jointpositions[6] == 255
     assert hand.g_jointpositions[7:20] == [255] * 13
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_thumb_cmc_yaw_motor_output_reverses_physical_direction(hand_class_name):
+def test_o30i_thumb_rotate_motor_output_uses_physical_direction(hand_class_name):
     import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
 
     hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
 
     hand.g_jointpositions_arc = [0.0] * 20
-    hand.g_jointpositions_arc[1] = 0.0
+    hand.g_jointpositions_arc[0] = 0.0
     hand._set_g_jointpositions_from_arc()
-    assert hand.g_jointpositions[1] == 255
+    assert hand.g_jointpositions[0] == 0
 
     hand.g_jointpositions_arc = [0.0] * 20
-    hand.g_jointpositions_arc[1] = 1.63
+    hand.g_jointpositions_arc[0] = 0.6108
     hand._set_g_jointpositions_from_arc()
-    assert hand.g_jointpositions[1] == 0
+    assert hand.g_jointpositions[0] == 255
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_roll_outputs_reverse_urdf_limits(hand_class_name):
+def test_o30i_four_finger_roll_outputs_reverse_urdf_limits(hand_class_name):
     import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
 
     hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
 
     roll_joints = (
-        (0, 0, 0.0, 0.6108),
         (4, 2, -0.07, 0.4),
         (8, 3, -0.26, 0.38),
         (12, 4, -0.17, 0.28),
@@ -211,7 +210,7 @@ def test_o30i_thumb_mcp_uses_actual_control_output_order(hand_class_name):
     hand.g_jointpositions_arc[2] = 1.51
     hand._set_g_jointpositions_from_arc()
 
-    assert hand.g_jointpositions[0] == 0
+    assert hand.g_jointpositions[0] == 255
     assert hand.g_jointpositions[6] == 255
 
 

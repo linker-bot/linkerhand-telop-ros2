@@ -422,6 +422,18 @@ class Retarget():
             self.force_feedback_thread.join(timeout=1.0)
         self.force_feedback_thread = None
 
+    @staticmethod
+    def _write_reader_packet(reader, data):
+        write_packet = getattr(reader, "write_packet", None)
+        if write_packet:
+            return write_packet(data)
+
+        serial_port = getattr(reader, "serial_port", None)
+        if serial_port is None:
+            return False
+        serial_port.write(data)
+        return True
+
     def _capture_o6_right_pinky_raw_jump(self, right_positions, left_valid=False, right_valid=True):
         if not getattr(self, "debug_enabled", False) or getattr(self.righthandtype, "name", self.righthandtype) != "o6":
             return None
@@ -681,7 +693,7 @@ class Retarget():
                     self.force_reader_left.handtype = handtype
                     self.force_reader_left.version = version
                     self.force_reader_left.start()
-                    self.force_reader_left.serial_port.write(self.force_reader_left.pack_01_data())
+                    self._write_reader_packet(self.force_reader_left, self.force_reader_left.pack_01_data())
                     self.leftport = port
                     self.leftbaudrate = baudrate
                     left_found = True
@@ -702,7 +714,7 @@ class Retarget():
                     self.force_reader_right.handtype = handtype
                     self.force_reader_right.version = version
                     self.force_reader_right.start()
-                    self.force_reader_right.serial_port.write(self.force_reader_right.pack_01_data())
+                    self._write_reader_packet(self.force_reader_right, self.force_reader_right.pack_01_data())
                     self.rightport = port
                     self.rightbaudrate = baudrate
                     right_found = True
