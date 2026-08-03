@@ -150,7 +150,7 @@ def test_o6_right_publish_trace_does_not_log_frame_rate(monkeypatch):
     assert infos == []
 
 
-def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch):
+def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch, tmp_path):
     def install_ros_stubs():
         rclpy = types.ModuleType("rclpy")
         rclpy_node = types.ModuleType("rclpy.node")
@@ -182,6 +182,11 @@ def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch):
     from linkerhand_retarget.motion.linkerforce.retarget import Retarget
 
     warnings = []
+    log_file = tmp_path / "linkerforce_abnormal.log"
+    monkeypatch.setattr(
+        "linkerhand.linkerforce.LINKERFORCE_ABNORMAL_LOG_FILE_PATH",
+        log_file,
+    )
 
     class FakeLogger:
         def warn(self, msg):
@@ -223,3 +228,10 @@ def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch):
     assert "raw_current=[4.0, 5.0, 6.0]" in warnings[0]
     assert "raw_previous=[4.0, 5.0, 6.0]" in warnings[1]
     assert "raw_current=[7.0, 8.0, 9.0]" in warnings[1]
+
+    log_text = log_file.read_text(encoding="utf-8")
+    assert "[LinkerForce右手电机端点跳变]" in log_text
+    assert "方向=255->0" in log_text
+    assert "方向=0->255" in log_text
+    assert "raw_previous=[1.0, 2.0, 3.0]" in log_text
+    assert "raw_current=[7.0, 8.0, 9.0]" in log_text

@@ -39,8 +39,8 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 1. LinkerForce 位置帧解析  
    校验 `0x03` 与 `0xA6` 位置帧必须为 21 路关节数据，拒绝长度异常、解包异常和非有限数值，减少坏帧污染实时姿态。
 
-2. O6 右手小指末端跳变捕捉  
-   对右手 `poslist[20]` 增加跳变阈值检测，触发后记录前后帧、差值和 18-20 序列原始弧度到 `right_pinky_end_jump.log`。
+2. LinkerForce 异常日志
+   未知命令帧记录命令、长度、校验和完整帧 hex；发布值出现 `255->0` 或 `0->255` 端点跳变时，记录触发关节的上一值、当前值和前后帧原始数据到 `linkerforce_abnormal.log`。`0.35 rad` 原始弧度小跳变不再落日志。
 
 3. 串口写入链路  
    运行线程查询包、初始化版本查询包和力反馈包统一走 `ForceSerialReader` 的写入封装，串口写入由锁保护。
@@ -60,7 +60,7 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 | --- | --- | --- |
 | 版本 | `VERSION.md` 读取与包版本号同步 | 待本次版本更新后验证 |
 | LinkerForce | 位置帧长度、通道数、非有限值保护 | 通过 |
-| LinkerForce | O6 右手小指末端原始数据跳变日志 | 通过 |
+| LinkerForce | 异常帧与 `255<->0` 端点跳变日志 | 通过 |
 | LinkerForce | 串口运行线程写入走统一写锁 | 通过 |
 | O6 | 默认映射状态切换为 `original -> fist` | 通过 |
 | O30i | URDF 弧度到 `0..255` 电机归一化 | 部分通过 |
@@ -68,11 +68,11 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 
 ## 6. 现场复测项
 
-1. 使用真实 LinkerForce 右手套复测 O6 小指末端跳变日志，重点观察日志中的 `raw18_19_20_prev/current/delta`。
+1. 使用真实 LinkerForce 手套复测异常日志，重点观察 `Unknown command` 的完整帧 hex，以及 `255->0`、`0->255` 端点跳变的 `prev/current/raw_previous/raw_current`。
 2. 使用真实 O6 左右手复测默认配置和标定启动脚本，确认 `/dev/ttyUSB0`、`/dev/ttyUSB1` 与现场接线一致。
 3. 使用真实 O30i 右手复测拇指 `thumb_cmc_roll`、`thumb_cmc_yaw` 的 open、opose、fist 三个姿态边界。
 4. 若 O30i 右手拇指实机方向正确但单测仍失败，需要重新确认测试里的标定输入和期望阈值。
 
 ## 7. 自测结论
 
-v2.12.7 已完成版本号、更新说明和自测报告记录。软件侧单测显示 LinkerForce 串口解析、跳变日志和串口写入链路相关用例通过；O30i 右手拇指实时 open-to-fist 边界仍有 2 个失败用例，需要后续结合最新标定文件和实机表现继续处理。
+v2.12.7 已完成版本号、更新说明和自测报告记录。软件侧单测显示 LinkerForce 串口解析、异常日志和串口写入链路相关用例通过；O30i 右手拇指实时 open-to-fist 边界仍有 2 个失败用例，需要后续结合最新标定文件和实机表现继续处理。

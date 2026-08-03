@@ -31,10 +31,8 @@ BUFFER_SIZE = 1024
 MAX_FRAME_DATA_SIZE = 255
 FRAME_HEADER = 0x5D
 POSITION_JOINT_COUNT = 21
-RIGHT_PINKY_END_JUMP_INDEX = 20
-RIGHT_PINKY_TRACE_INDICES = (18, 19, 20)
-RIGHT_PINKY_END_JUMP_THRESHOLD_RAD = 0.35
-PINKY_JUMP_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "tmp" / "right_pinky_end_jump.log"
+LINKERFORCE_ABNORMAL_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "tmp" / "linkerforce_abnormal.log"
+PINKY_JUMP_LOG_FILE_PATH = LINKERFORCE_ABNORMAL_LOG_FILE_PATH
 
 # 时序常量
 WARMUP_DELAY = 0.15
@@ -57,6 +55,15 @@ USB_PATTERNS = [
     r'/dev/ttyXRUSB\d+',
     r'/dev/ttyOBC\d+',
 ]
+
+
+def append_linkerforce_abnormal_log(message: str) -> None:
+    try:
+        LINKERFORCE_ABNORMAL_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with LINKERFORCE_ABNORMAL_LOG_FILE_PATH.open("a", encoding="utf-8") as file:
+            file.write(message + "\n")
+    except OSError:
+        return
 
 
 # ============== 环形缓冲区 ==============
@@ -220,7 +227,6 @@ class FrameHandler:
         self._poslist: List[float] = [0.0] * 21
         self._forcelist: List[float] = [0.0] * 5
         self._realforcelist: List[int] = [0] * 5
-        self._last_right_pinky_position_frame: Optional[List[float]] = None
 
     @property
     def poslist(self) -> List[float]:
@@ -269,8 +275,26 @@ class FrameHandler:
             return self._handle_a6_position(frame_data)
         else:
             if self.logger:
-                self.logger.log('warn', f"Unknown command: 0x{cmd:02X}")
+                message = self._format_unknown_command_log(cmd, data_len, frame)
+                self.logger.log('warn', message)
+                append_linkerforce_abnormal_log(
+                    f"[LinkerForce异常帧] timestamp={datetime.now().isoformat()}, {message}"
+                )
             return None
+
+    @staticmethod
+    def _format_unknown_command_log(cmd: int, data_len: int, frame: array.array) -> str:
+        checksum_index = 3 + data_len
+        frame_end = min(len(frame), checksum_index + 1)
+        checksum = frame[checksum_index] if checksum_index < len(frame) else None
+        checksum_text = "None" if checksum is None else f"0x{checksum:02X}"
+        frame_hex = " ".join(f"{byte:02X}" for byte in frame[:frame_end])
+        return (
+            f"Unknown command: 0x{cmd:02X}, "
+            f"len={data_len}, "
+            f"checksum={checksum_text}, "
+            f"frame={frame_hex}"
+        )
 
     def _handle_version(self, frame_data: array.array) -> Dict[str, Any]:
         value = struct.unpack('<I', frame_data[:4])[0]
@@ -310,52 +334,11 @@ class FrameHandler:
             if self.logger:
                 self.logger.log('warn', "Invalid position data: contains non-finite value")
             return None
-        self._trace_right_pinky_end_jump(floats, source='0xA3' if is_a3 else '0x03')
         self.poslist = floats
         result: Dict[str, Any] = {'poslist': floats}
         if is_a3:
             result['a6count'] = True
         return result
-
-    def _trace_right_pinky_end_jump(self, floats: List[float], source: str) -> None:
-        if self._handtype != HandType.right or len(floats) <= RIGHT_PINKY_END_JUMP_INDEX:
-            return
-
-        previous = self._last_right_pinky_position_frame
-        self._last_right_pinky_position_frame = list(floats)
-        if previous is None or len(previous) <= RIGHT_PINKY_END_JUMP_INDEX:
-            return
-
-        current_value = floats[RIGHT_PINKY_END_JUMP_INDEX]
-        previous_value = previous[RIGHT_PINKY_END_JUMP_INDEX]
-        delta = current_value - previous_value
-        if abs(delta) < RIGHT_PINKY_END_JUMP_THRESHOLD_RAD:
-            return
-
-        previous_trace = [previous[index] for index in RIGHT_PINKY_TRACE_INDICES]
-        current_trace = [floats[index] for index in RIGHT_PINKY_TRACE_INDICES]
-        delta_trace = [current - prev for current, prev in zip(current_trace, previous_trace)]
-        self._append_pinky_jump_log(
-            "[LinkerForce右手小指末端原始数据跳变] "
-            f"timestamp={datetime.now().isoformat()}, "
-            f"source={source}, "
-            f"idx={RIGHT_PINKY_END_JUMP_INDEX}, "
-            f"prev={previous_value:.6f}, "
-            f"current={current_value:.6f}, "
-            f"delta={delta:.6f}, "
-            f"threshold={RIGHT_PINKY_END_JUMP_THRESHOLD_RAD:.6f}, "
-            f"raw18_19_20_prev={[round(value, 6) for value in previous_trace]}, "
-            f"raw18_19_20_current={[round(value, 6) for value in current_trace]}, "
-            f"raw18_19_20_delta={[round(value, 6) for value in delta_trace]}"
-        )
-
-    def _append_pinky_jump_log(self, message: str) -> None:
-        try:
-            PINKY_JUMP_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with PINKY_JUMP_LOG_FILE_PATH.open("a", encoding="utf-8") as file:
-                file.write(message + "\n")
-        except OSError:
-            return
 
     def _handle_force(self, frame_data: array.array) -> Optional[Dict[str, Any]]:
         if len(frame_data) % 2 != 0:

@@ -23,7 +23,7 @@ if _project_root_str in sys.path:
     sys.path.remove(_project_root_str)
 sys.path.insert(0, _project_root_str)
 
-from linkerhand.linkerforce import ForceSerialReader
+from linkerhand.linkerforce import ForceSerialReader, append_linkerforce_abnormal_log
 from linkerhand.constants import RobotName, ROBOT_LEN_MAP, HandType
 from linkerhand.handcore import HandCore
 from tqdm import tqdm
@@ -510,7 +510,7 @@ class Retarget():
             if direction is None:
                 continue
 
-            self.node.get_logger().warn(
+            message = (
                 f"[LinkerForce{hand_name}电机端点跳变] "
                 f"timestamp={datetime.now().isoformat()}, "
                 f"idx={index}, "
@@ -520,6 +520,8 @@ class Retarget():
                 f"raw_previous={previous_raw}, "
                 f"raw_current={current_raw}"
             )
+            self.node.get_logger().warn(message)
+            append_linkerforce_abnormal_log(message)
 
     def _trace_o6_right_publish_frame_rate(self, raw_jump_trace):
         if not getattr(self, "debug_o6_publish_rate_enabled", False):
