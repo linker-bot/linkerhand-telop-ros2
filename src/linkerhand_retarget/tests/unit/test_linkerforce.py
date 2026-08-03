@@ -121,6 +121,22 @@ class TestFrameParser:
         for byte in frame2:
             parser.process_byte(byte)
 
+    def test_invalid_command_candidate_resyncs_to_next_valid_frame_header(self):
+        parser = FrameParser()
+        valid_frame = FrameHandler.pack_data(
+            CommandCode.POSITION_QUERY.value,
+            struct.pack("<21f", *range(21)),
+        )
+        stream = bytes([FRAME_HEADER, 0x66, 0x43, 0x26, 0x83, 0x71, 0x43]) + valid_frame
+
+        parsed_commands = []
+        for byte in stream:
+            if parser.process_byte(byte):
+                parsed_commands.append(parser.frame_buf[1])
+                parser.reset()
+
+        assert parsed_commands == [CommandCode.POSITION_QUERY.value]
+
 
 class TestFrameHandlerPositionFrames:
     @staticmethod

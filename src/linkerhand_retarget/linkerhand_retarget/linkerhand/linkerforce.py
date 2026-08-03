@@ -26,6 +26,9 @@ class CommandCode(Enum):
     A7_FORCE = 0xA7
 
 
+VALID_COMMAND_VALUES = {command.value for command in CommandCode}
+
+
 # 协议常量
 BUFFER_SIZE = 1024
 MAX_FRAME_DATA_SIZE = 255
@@ -127,6 +130,9 @@ class FrameParser:
                 self.checksum = 0
                 self.state = FrameParseState.CMD
         elif self.state == FrameParseState.CMD:
+            if byte not in VALID_COMMAND_VALUES:
+                self.reset()
+                return False
             self.frame_buf[1] = byte
             self.current_pos = 2
             self.state = FrameParseState.LENGTH

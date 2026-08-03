@@ -39,19 +39,22 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 1. LinkerForce 位置帧解析  
    校验 `0x03` 与 `0xA6` 位置帧必须为 21 路关节数据，拒绝长度异常、解包异常和非有限数值，减少坏帧污染实时姿态。
 
-2. LinkerForce 异常日志
+2. LinkerForce 串口帧重同步
+   解析器在帧头后的命令字阶段发现非法命令时立即丢弃候选帧，继续寻找下一个有效帧头，避免数据区 `0x5D` 误触发 `Unknown command: 0x66` 并吞掉真实 `0x03` 位置帧。
+
+3. LinkerForce 异常日志
    未知命令帧记录命令、长度、校验和完整帧 hex；发布值出现 `255->0` 或 `0->255` 端点跳变时，记录触发关节的上一值、当前值和前后帧原始数据到 `linkerforce_abnormal.log`。`0.35 rad` 原始弧度小跳变不再落日志。
 
-3. 串口写入链路  
+4. 串口写入链路
    运行线程查询包、初始化版本查询包和力反馈包统一走 `ForceSerialReader` 的写入封装，串口写入由锁保护。
 
-4. O6 映射状态  
+5. O6 映射状态
    已按参考项目同步 O6 配置，默认多段映射状态调整为 `original -> fist`，保留 `opose` 状态配置。
 
-5. O30i 输出方向与归一化  
+6. O30i 输出方向与归一化
    更新 O30i 拇指旋转和四指 roll 的电机归一化测试，当前仍需继续核对右手拇指实时 open-to-fist 的期望边界。
 
-6. 现场测试配置  
+7. 现场测试配置
    `base_config.yml` 默认切换到 LinkerForce/O6 左右手，右手串口示例为 `/dev/ttyUSB1`；`run_linkerhand_teleop.sh` 默认进入标定模式。
 
 ## 5. 关键结论
@@ -60,6 +63,7 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 | --- | --- | --- |
 | 版本 | `VERSION.md` 读取与包版本号同步 | 待本次版本更新后验证 |
 | LinkerForce | 位置帧长度、通道数、非有限值保护 | 通过 |
+| LinkerForce | 非法命令候选帧重同步 | 通过 |
 | LinkerForce | 异常帧与 `255<->0` 端点跳变日志 | 通过 |
 | LinkerForce | 串口运行线程写入走统一写锁 | 通过 |
 | O6 | 默认映射状态切换为 `original -> fist` | 通过 |
