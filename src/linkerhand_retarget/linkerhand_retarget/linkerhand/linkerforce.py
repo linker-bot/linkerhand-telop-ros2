@@ -280,12 +280,10 @@ class FrameHandler:
         elif cmd == CommandCode.A6_POSITION.value:
             return self._handle_a6_position(frame_data)
         else:
-            if self.logger:
-                message = self._format_unknown_command_log(cmd, data_len, frame)
-                self.logger.log('warn', message)
-                append_linkerforce_abnormal_log(
-                    f"[LinkerForce异常帧] timestamp={datetime.now().isoformat()}, {message}"
-                )
+            message = self._format_unknown_command_log(cmd, data_len, frame)
+            append_linkerforce_abnormal_log(
+                f"[LinkerForce异常帧] timestamp={datetime.now().isoformat()}, {message}"
+            )
             return None
 
     @staticmethod

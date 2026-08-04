@@ -253,12 +253,7 @@ class TestFrameHandlerPositionFrames:
         result = handler.handle_frame(frame)
 
         assert result is None
-        assert messages == [
-            (
-                "warn",
-                "Unknown command: 0x66, len=2, checksum=0xC8, frame=5D 66 02 01 02 C8",
-            )
-        ]
+        assert messages == []
         log_text = log_file.read_text(encoding="utf-8")
         assert "[LinkerForce异常帧]" in log_text
         assert "Unknown command: 0x66" in log_text

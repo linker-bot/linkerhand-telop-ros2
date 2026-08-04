@@ -43,7 +43,7 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
    解析器在帧头后的命令字阶段发现非法命令时立即丢弃候选帧，继续寻找下一个有效帧头，避免数据区 `0x5D` 误触发 `Unknown command: 0x66` 并吞掉真实 `0x03` 位置帧。
 
 3. LinkerForce 异常日志
-   未知命令帧记录命令、长度、校验和完整帧 hex；发布值出现 `255->0` 或 `0->255` 端点跳变时，记录触发关节的上一值、当前值和前后帧原始数据到 `linkerforce_abnormal.log`。`0.35 rad` 原始弧度小跳变不再落日志。
+   未知命令帧仅写入 `linkerforce_abnormal.log`，记录命令、长度、校验和完整帧 hex，不再通过 ROS warn 刷屏；发布值出现 `255->0` 或 `0->255` 端点跳变时，记录触发关节的上一值、当前值和前后帧原始数据。`0.35 rad` 原始弧度小跳变不再落日志。
 
 4. 串口写入链路
    运行线程查询包、初始化版本查询包和力反馈包统一走 `ForceSerialReader` 的写入封装，串口写入由锁保护。
