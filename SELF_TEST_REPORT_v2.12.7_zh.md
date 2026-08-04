@@ -54,7 +54,10 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 6. O30i 输出方向与归一化
    更新 O30i 拇指旋转和四指 roll 的电机归一化测试，当前仍需继续核对右手拇指实时 open-to-fist 的期望边界。
 
-7. 现场测试配置
+7. MuJoCo 显示稳定性
+   双手显示时改为隔离子进程启动以避免 native viewer 崩溃；`base_config.yml` 默认将 `mujoco.enabled` 关闭，仍可按配置开启。
+
+8. 现场测试配置
    `base_config.yml` 默认切换到 LinkerForce/O6 左右手，右手串口示例为 `/dev/ttyUSB1`；`run_linkerhand_teleop.sh` 默认进入标定模式。
 
 ## 5. 关键结论
@@ -68,6 +71,7 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 | LinkerForce | 串口运行线程写入走统一写锁 | 通过 |
 | O6 | 默认映射状态切换为 `original -> fist` | 通过 |
 | O30i | URDF 弧度到 `0..255` 电机归一化 | 部分通过 |
+| MuJoCo | 双手显示隔离子进程与默认关闭开关 | 通过 |
 | O30i | 右手拇指实时 open-to-fist roll/yaw 边界 | 未通过 |
 
 ## 6. 现场复测项

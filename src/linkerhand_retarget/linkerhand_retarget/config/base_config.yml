@@ -13,7 +13,7 @@ linkereg:
   password: i
   port: null
 mujoco:
-  enabled: true
+  enabled: false
   fps: 30
   hands: auto
   model_rotate_rpy:

@@ -50,6 +50,7 @@ from linkerhand.config import HandConfig
 from linkerhand.constants import RetargetingType, DataSource, MotionSource, RobotName
 from linkerhand_retarget.mujoco_display import (
     MujocoDisplay,
+    MujocoDisplayProcess,
     build_mujoco_display_plans,
     detect_loaded_hands,
     extract_mujoco_joint_positions,
@@ -242,6 +243,14 @@ class HandRetargetNode(Node):
             f"plans={[(plan.hand, str(plan.model_path)) for plan in plans]}"
         )
 
+        startable_plan_count = sum(1 for plan in plans if plan.should_start)
+        display_class = MujocoDisplayProcess if startable_plan_count > 1 else MujocoDisplay
+        if display_class is MujocoDisplayProcess:
+            self.get_logger().warn(
+                "MuJoCo display will use isolated processes for multiple hands "
+                "to avoid native viewer crashes."
+            )
+
         for plan in plans:
             for warning in plan.warnings:
                 self.get_logger().warn(warning)
@@ -253,7 +262,7 @@ class HandRetargetNode(Node):
                 continue
 
             try:
-                display = MujocoDisplay(
+                display = display_class(
                     plan.model_path,
                     fps=plan.fps,
                     hand=plan.hand,

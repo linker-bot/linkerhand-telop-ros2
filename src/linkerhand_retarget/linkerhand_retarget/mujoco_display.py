@@ -1,4 +1,7 @@
 import importlib.util
+import json
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -745,3 +748,97 @@ class MujocoDisplay:
         if self.viewer is not None:
             self.viewer.close()
             self.viewer = None
+
+
+class MujocoDisplayProcess:
+    def __init__(
+        self,
+        model_path: Path,
+        fps: int = 30,
+        hand: str = "right",
+        model_scale: float = 1.0,
+        model_rotate_rpy: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        model_translate_xyz: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        popen_factory=None,
+    ):
+        self.model_path = Path(model_path)
+        self.fps = fps
+        self.hand = hand
+        self.model_scale = model_scale
+        self.model_rotate_rpy = _normalize_rpy(model_rotate_rpy)
+        self.model_translate_xyz = _normalize_xyz(model_translate_xyz)
+        self.movable_joint_names = get_urdf_movable_joint_names(self.model_path)
+        self.mimic_joint_rules = get_urdf_mimic_joint_rules(self.model_path)
+        self._popen_factory = popen_factory or subprocess.Popen
+        self.process = None
+
+    def start(self):
+        config = {
+            "model_path": str(self.model_path),
+            "fps": int(self.fps),
+            "hand": self.hand,
+            "model_scale": float(self.model_scale),
+            "model_rotate_rpy": self.model_rotate_rpy,
+            "model_translate_xyz": self.model_translate_xyz,
+        }
+        self.process = self._popen_factory(
+            [
+                sys.executable,
+                "-m",
+                "linkerhand_retarget.mujoco_display_worker",
+                json.dumps(config),
+            ],
+            stdin=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        return self
+
+    def update_joint_positions(self, joint_positions: Mapping[str, float]) -> bool:
+        if self.process is None or self.process.stdin is None:
+            return False
+        if self.process.poll() is not None:
+            return False
+
+        try:
+            self.process.stdin.write(
+                json.dumps(
+                    {
+                        "command": "update",
+                        "positions": {
+                            name: float(value)
+                            for name, value in joint_positions.items()
+                        },
+                    }
+                )
+                + "\n"
+            )
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            return False
+        return True
+
+    def close(self):
+        if self.process is None:
+            return
+
+        if self.process.stdin is not None:
+            try:
+                self.process.stdin.write(json.dumps({"command": "close"}) + "\n")
+                self.process.stdin.flush()
+                self.process.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+
+        try:
+            self.process.wait(timeout=2.0)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=1.0)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    self.process.kill()
+                except OSError:
+                    pass
+        self.process = None

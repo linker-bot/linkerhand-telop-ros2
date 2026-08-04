@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import sys
 import types
@@ -8,6 +9,7 @@ import serial.tools.list_ports
 
 from linkerhand_retarget.mujoco_display import (
     MujocoDisplay,
+    MujocoDisplayProcess,
     _module_available,
     build_mujoco_display_plan,
     build_mujoco_display_plans,
@@ -1073,3 +1075,79 @@ def test_mujoco_display_applies_mimic_joints_from_urdf(tmp_path):
     assert display.data.qpos == pytest.approx([2.0, 3.76, 3.0, 2.67])
     assert fake_mujoco.forward_count == 1
     assert display.viewer.sync_count == 1
+
+
+def test_mujoco_display_process_delegates_updates_to_isolated_process(tmp_path):
+    urdf_path = tmp_path / "robot.urdf"
+    urdf_path.write_text(
+        """
+        <robot name="test">
+          <link name="base" />
+          <joint name="index_mcp_pitch" type="revolute">
+            <parent link="base" /><child link="index1" />
+          </joint>
+        </robot>
+        """,
+        encoding="utf-8",
+    )
+
+    class FakeStdin:
+        def __init__(self):
+            self.lines = []
+            self.closed = False
+
+        def write(self, line):
+            self.lines.append(line)
+
+        def flush(self):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self, args, stdin, text, bufsize):
+            self.args = args
+            self.stdin_arg = stdin
+            self.text = text
+            self.bufsize = bufsize
+            self.stdin = FakeStdin()
+            self.returncode = None
+            self.terminated = False
+            self.wait_timeout = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.wait_timeout = timeout
+            self.returncode = 0
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+
+    display = MujocoDisplayProcess(
+        urdf_path,
+        fps=30,
+        hand="left",
+        model_scale=5.0,
+        model_rotate_rpy=(0.0, -0.7, -1.5),
+        model_translate_xyz=(0.0, 0.0, -0.5),
+        popen_factory=FakeProcess,
+    ).start()
+
+    assert display.process.args[1:3] == ["-m", "linkerhand_retarget.mujoco_display_worker"]
+    assert display.update_joint_positions({"index_mcp_pitch": 1.23}) is True
+    assert json.loads(display.process.stdin.lines[-1]) == {
+        "command": "update",
+        "positions": {"index_mcp_pitch": 1.23},
+    }
+
+    process = display.process
+    display.close()
+
+    assert json.loads(process.stdin.lines[-1]) == {"command": "close"}
+    assert process.stdin.closed is True
+    assert process.wait_timeout == 2.0
+    assert process.terminated is False
