@@ -166,6 +166,47 @@ class TestFrameHandlerPositionFrames:
         assert result is None
         assert handler.poslist == previous
 
+    def test_position_frame_rejects_any_degree_over_360_without_overwriting_poslist(self, monkeypatch, tmp_path):
+        log_file = tmp_path / "linkerforce_abnormal.log"
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.LINKERFORCE_ABNORMAL_LOG_FILE_PATH",
+            log_file,
+        )
+        handler = FrameHandler(HandType.right)
+        previous = [42.0] * 21
+        handler.poslist = previous
+        values = [0.0] * 20 + [361.0]
+
+        result = handler._handle_position(self._position_payload(values))
+
+        assert result is None
+        assert handler.poslist == previous
+        log_text = log_file.read_text(encoding="utf-8")
+        assert "[LinkerForce位置错报文]" in log_text
+        assert "idx=20" in log_text
+        assert "degree=361.000000" in log_text
+
+    def test_position_frame_rejects_any_negative_degree_without_overwriting_poslist(self, monkeypatch, tmp_path):
+        log_file = tmp_path / "linkerforce_abnormal.log"
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.LINKERFORCE_ABNORMAL_LOG_FILE_PATH",
+            log_file,
+        )
+        handler = FrameHandler(HandType.right)
+        previous = [42.0] * 21
+        handler.poslist = previous
+        values = [0.0] * 21
+        values[7] = -1.0
+
+        result = handler._handle_position(self._position_payload(values))
+
+        assert result is None
+        assert handler.poslist == previous
+        log_text = log_file.read_text(encoding="utf-8")
+        assert "[LinkerForce位置错报文]" in log_text
+        assert "idx=7" in log_text
+        assert "degree=-1.000000" in log_text
+
     def test_a6_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
         handler = FrameHandler(HandType.right)
         previous = [42.0] * 21

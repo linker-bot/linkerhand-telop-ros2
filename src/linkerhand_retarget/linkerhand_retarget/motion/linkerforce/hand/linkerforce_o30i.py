@@ -8,7 +8,8 @@ import copy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from linkerhand.handcore import HandCore
-from ..config.o30i_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS
+from ..config.calibration_checklist import normalize_calibration_filter_config
+from ..config.o30i_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
 
 O30I_MUJOCO_JOINT_ARC_INDICES = (
@@ -282,6 +283,7 @@ class RightHand:
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
         self.smooth_enabled = True
@@ -534,6 +536,7 @@ class LeftHand:
         self.calibrationfistpose = None
         self.calibrationopose = None
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         self.smooth_enabled = True
         self.smooth_alpha = 0.5

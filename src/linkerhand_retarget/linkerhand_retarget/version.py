@@ -21,7 +21,7 @@ def find_version_file(start: Optional[Path] = None) -> Path:
 
 def _fallback_version() -> str:
     try:
-        from linkerhand import __version__
+        from .linkerhand import __version__
     except Exception:
         return "0.0.0"
     return str(__version__)

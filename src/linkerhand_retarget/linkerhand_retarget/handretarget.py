@@ -437,6 +437,18 @@ class HandRetargetNode(Node):
                 lefthandpubprint=self.lefthandprint,
                 righthandpubprint=self.righthandprint
             )    
+        elif self.motion_type == MotionSource.linkermcg_m7:
+            from linkerhand_retarget.motion.linkermcg_m7.retarget import Retarget
+            self.retarget = Retarget(
+                self,
+                ip=self.udp_ip,
+                port=self.udp_port,
+                righthand=self.robot_name_r,
+                lefthand=self.robot_name_l,
+                handcore=self.handcore,
+                lefthandpubprint=self.lefthandprint,
+                righthandpubprint=self.righthandprint
+            )
         elif self.motion_type == MotionSource.linkereg2:
             from linkerhand_retarget.motion.linkereg.retarget import Retarget
             self.retarget = Retarget(

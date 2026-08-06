@@ -340,6 +340,11 @@ MAPPING_ORDER = [
     'pinky_roll', 'pinky_root_flexion', 'pinky_end_flexion'
 ]
 
+CALIBRATION_FILTER_CONFIG = {
+    'tracked_joints': tuple(range(21)),
+    'pose_tracked_joints': {},
+}
+
 MULTI_SEGMENT_CONFIG = {
     'states': [
         'original', 

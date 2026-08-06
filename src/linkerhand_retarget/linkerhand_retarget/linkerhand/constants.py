@@ -65,6 +65,7 @@ class MotionSource(enum.Enum):
     linkerforce = enum.auto()
     sensenova = enum.auto()
     linkermcg = enum.auto()
+    linkermcg_m7 = enum.auto()
     linkereg1 = enum.auto()
     linkereg2 = enum.auto()
 

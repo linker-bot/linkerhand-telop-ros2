@@ -204,6 +204,17 @@ MAPPING_ORDER = [
     
 ]
 
+CALIBRATION_FILTER_CONFIG = {
+    'tracked_joints': (
+        0, 1, 2, 3, 4, 5,
+        6, 7, 8,
+        10, 11, 12, 13,
+        14, 15, 16, 17,
+        18, 19, 20,
+    ),
+    'pose_tracked_joints': {},
+}
+
 MULTI_SEGMENT_CONFIG = {
     'states': [
         'original',

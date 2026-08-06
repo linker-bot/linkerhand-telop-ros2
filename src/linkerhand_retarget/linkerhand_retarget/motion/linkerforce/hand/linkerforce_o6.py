@@ -6,7 +6,8 @@ v2.8.0升级了映射器算法
 import numpy as np
 import copy
 from linkerhand.handcore import HandCore
-from ..config.o6_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_ORIGINAL_LEFT, ROBOT_FIST_RIGHT, ROBOT_FIST_LEFT, MULTI_SEGMENT_CONFIG, MOTOR_CONSTRAINTS
+from ..config.calibration_checklist import normalize_calibration_filter_config
+from ..config.o6_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_ORIGINAL_LEFT, ROBOT_FIST_RIGHT, ROBOT_FIST_LEFT, MULTI_SEGMENT_CONFIG, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
 
@@ -38,6 +39,7 @@ class RightHand:
         self.calibrationfistpose = None
         self.calibrationopose = None
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
         self.smooth_enabled = True
@@ -279,6 +281,7 @@ class LeftHand:
         self.calibrationfistpose = None
         self.calibrationopose = None
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         self.smooth_enabled = True
         self.smooth_alpha = 0.5

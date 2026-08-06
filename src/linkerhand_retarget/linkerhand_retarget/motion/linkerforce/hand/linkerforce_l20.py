@@ -5,12 +5,13 @@ LinkerForce L20 手型映射模块 - ROS2版本
 import numpy as np
 import copy
 from linkerhand.handcore import HandCore
+from ..config.calibration_checklist import normalize_calibration_filter_config
 from ..config.l20_config import (
     FINGER_CONFIGS, MAPPING_ORDER, MULTI_SEGMENT_CONFIG,
     ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT,
     ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT,
     ROBOT_OPOSE_LEFT, ROBOT_OPOSE_RIGHT,
-    MOTOR_CONSTRAINTS
+    MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 )
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
@@ -30,6 +31,7 @@ class RightHand:
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
         self.smooth_enabled = True
@@ -302,6 +304,7 @@ class LeftHand:
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
         self.glove_version = 'v2'
+        self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
         self.smooth_enabled = True

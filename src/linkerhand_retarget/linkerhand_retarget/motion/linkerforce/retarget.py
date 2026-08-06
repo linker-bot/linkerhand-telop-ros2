@@ -40,6 +40,11 @@ import serial.tools.list_ports
 import numpy as np
 import math
 import yaml
+from .config.calibration_checklist import (
+    get_calibration_joint_indices,
+    get_calibration_skipped_joint_indices,
+    normalize_calibration_filter_config,
+)
 
 
 TMP_FILE_PATH = Path(__file__).parent / "tmp" / "jointangle_data.tmp"
@@ -1041,6 +1046,54 @@ class Retarget():
         is_stable = var_left < threshold and var_right < threshold
         return is_stable, max(var_left, var_right)
 
+    def _calibration_stability_metrics(self, samples, tracked_joints):
+        if not samples:
+            return 0.0, 0.0
+
+        data_array = np.array(samples, dtype=float)
+        if data_array.ndim != 2 or data_array.shape[0] == 0:
+            return 0.0, 0.0
+
+        valid_indices = [
+            idx for idx in tracked_joints
+            if 0 <= int(idx) < data_array.shape[1]
+        ]
+        if not valid_indices:
+            return 0.0, 0.0
+
+        filtered = data_array[:, valid_indices]
+        variance = float(np.var(filtered, axis=0).mean())
+        drift = float(np.abs(filtered[-1] - filtered[0]).mean())
+        return variance, drift
+
+    def _log_calibration_checklist(self, side, hand, tracked_joints, pose_name=None, total_joints=21):
+        node = getattr(self, "node", None)
+        if node is None or not hasattr(node, "get_logger"):
+            return
+
+        config = normalize_calibration_filter_config(
+            getattr(hand, "calibration_filter_config", None)
+        )
+        labels = config.get("joint_labels", {})
+        skipped_joints = get_calibration_skipped_joint_indices(
+            hand,
+            pose=pose_name,
+            total_joints=total_joints,
+        )
+        tracked_desc = ", ".join(
+            f"{idx}:{labels.get(idx, idx)}" for idx in tracked_joints
+        )
+        skipped_desc = ", ".join(
+            f"{idx}:{labels.get(idx, idx)}" for idx in skipped_joints
+        ) or "无"
+
+        pose_desc = pose_name or "default"
+        node.get_logger().info(
+            f"LinkerForce标定抖动检测清单: hand={side}, pose={pose_desc}, "
+            f"tracked_count={len(tracked_joints)}, tracked=[{tracked_desc}], "
+            f"skipped=[{skipped_desc}]"
+        )
+
     def _is_reader_connected(self, hand):
         reader = getattr(self, f"force_reader_{hand}", None)
         expected_handtype = "Left" if hand == "left" else "Right"
@@ -1064,7 +1117,7 @@ class Retarget():
         else:
             self.node.get_logger().warn("左手标定数据不完整，跳过左手映射器初始化")
     
-    def _calibration_with_progress(self, stability_window=30, stability_threshold=0.03):
+    def _calibration_with_progress(self, stability_window=30, stability_threshold=0.03, pose_name=None):
         """
         带稳定性检测的标定数据采集
         
@@ -1084,6 +1137,15 @@ class Retarget():
 
         left_reader = self.force_reader_left if left_valid else None
         right_reader = self.force_reader_right if right_valid else None
+        pose_name = pose_name or getattr(self, "_current_calibration_pose", None)
+        left_hand = getattr(self, "lefthand", None)
+        right_hand = getattr(self, "righthand", None)
+        left_tracked_joints = get_calibration_joint_indices(left_hand, pose=pose_name)
+        right_tracked_joints = get_calibration_joint_indices(right_hand, pose=pose_name)
+        if left_valid:
+            self._log_calibration_checklist("left", left_hand, left_tracked_joints, pose_name=pose_name)
+        if right_valid:
+            self._log_calibration_checklist("right", right_hand, right_tracked_joints, pose_name=pose_name)
 
         temp_buffer_left = []
         temp_buffer_right = []
@@ -1125,11 +1187,19 @@ class Retarget():
                 variances = []
                 drifts = []
                 if left_valid:
-                    variances.append(np.var(temp_buffer_left, axis=0).mean())
-                    drifts.append(np.abs(np.array(temp_buffer_left[-1]) - np.array(temp_buffer_left[0])).mean())
+                    variance_left, drift_left = self._calibration_stability_metrics(
+                        temp_buffer_left,
+                        left_tracked_joints,
+                    )
+                    variances.append(variance_left)
+                    drifts.append(drift_left)
                 if right_valid:
-                    variances.append(np.var(temp_buffer_right, axis=0).mean())
-                    drifts.append(np.abs(np.array(temp_buffer_right[-1]) - np.array(temp_buffer_right[0])).mean())
+                    variance_right, drift_right = self._calibration_stability_metrics(
+                        temp_buffer_right,
+                        right_tracked_joints,
+                    )
+                    variances.append(variance_right)
+                    drifts.append(drift_right)
 
                 variance = max(variances)
                 drift = max(drifts)
@@ -1192,6 +1262,7 @@ class Retarget():
             print(f"{Fore.YELLOW}【标定 1/{total_steps}】请握紧拳头 (对应电机值0){Fore.RESET}")
             print(f"{Fore.YELLOW}{'='*50}{Fore.RESET}\n")
 
+            self._current_calibration_pose = "fist"
             self._calibration_with_progress(10)
 
             fist_ok = True
@@ -1218,6 +1289,7 @@ class Retarget():
             print(f"{Fore.MAGENTA}【标定 2/{total_steps}】请保持O型手势 (对应电机中间值){Fore.RESET}")
             print(f"{Fore.MAGENTA}{'='*50}{Fore.RESET}\n")
 
+            self._current_calibration_pose = "opose"
             self._calibration_with_progress(10)
 
             opose_ok = True
@@ -1244,6 +1316,7 @@ class Retarget():
             print(f"{Fore.GREEN}【标定 3/{total_steps}】请保持五指张开姿势 (对应电机值255){Fore.RESET}")
             print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
 
+            self._current_calibration_pose = "original"
             self._calibration_with_progress(10)
 
             open_ok = True
@@ -1270,6 +1343,7 @@ class Retarget():
             print(f"{Fore.MAGENTA}【标定 1/{total_steps}】请保持O型手势 (对应电机中间值){Fore.RESET}")
             print(f"{Fore.MAGENTA}{'='*50}{Fore.RESET}\n")
 
+            self._current_calibration_pose = "opose"
             self._calibration_with_progress(10)
 
             opose_ok = True
@@ -1296,6 +1370,7 @@ class Retarget():
             print(f"{Fore.GREEN}【标定 2/{total_steps}】请保持五指张开姿势 (对应电机值255){Fore.RESET}")
             print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
 
+            self._current_calibration_pose = "original"
             self._calibration_with_progress(10)
 
             open_ok = True
@@ -1323,6 +1398,7 @@ class Retarget():
             print(f"{Fore.GREEN}{'='*50}{Fore.RESET}\n")
         
         self.calibration_in_progress = False
+        self._current_calibration_pose = None
         self._initialize_ready_mappers()
         return True
 

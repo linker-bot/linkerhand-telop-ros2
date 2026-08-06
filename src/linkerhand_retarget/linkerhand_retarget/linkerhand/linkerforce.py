@@ -34,6 +34,8 @@ BUFFER_SIZE = 1024
 MAX_FRAME_DATA_SIZE = 255
 FRAME_HEADER = 0x5D
 POSITION_JOINT_COUNT = 21
+POSITION_MIN_DEGREE = 0.0
+POSITION_MAX_DEGREE = 360.0
 LINKERFORCE_ABNORMAL_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "tmp" / "linkerforce_abnormal.log"
 PINKY_JUMP_LOG_FILE_PATH = LINKERFORCE_ABNORMAL_LOG_FILE_PATH
 
@@ -329,15 +331,31 @@ class FrameHandler:
         for i in range(channel_count):
             try:
                 val = struct.unpack('<f', frame_data[i*4:(i+1)*4])[0]
+                if not np.isfinite(val):
+                    if self.logger:
+                        self.logger.log('warn', "Invalid position data: contains non-finite value")
+                    return None
+                if val < POSITION_MIN_DEGREE or val > POSITION_MAX_DEGREE:
+                    source = "0xA3" if is_a3 else "0x03"
+                    raw_bytes = frame_data[i*4:(i+1)*4]
+                    raw_hex = " ".join(f"{byte:02X}" for byte in raw_bytes)
+                    payload_hex = " ".join(f"{byte:02X}" for byte in frame_data)
+                    append_linkerforce_abnormal_log(
+                        "[LinkerForce位置错报文] "
+                        f"timestamp={datetime.now().isoformat()}, "
+                        f"source={source}, "
+                        f"idx={i}, "
+                        f"degree={val:.6f}, "
+                        f"valid_range=[{POSITION_MIN_DEGREE:.6f}, {POSITION_MAX_DEGREE:.6f}], "
+                        f"raw_bytes={raw_hex}, "
+                        f"payload={payload_hex}"
+                    )
+                    return None
                 floats.append(np.deg2rad(val))
             except struct.error as e:
                 if self.logger:
                     self.logger.log('warn', f"Unpack error: {e}")
                 return None
-        if not all(np.isfinite(value) for value in floats):
-            if self.logger:
-                self.logger.log('warn', "Invalid position data: contains non-finite value")
-            return None
         self.poslist = floats
         result: Dict[str, Any] = {'poslist': floats}
         if is_a3:

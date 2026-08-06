@@ -16,7 +16,7 @@ data_files = [
 
 setup(
     name=package_name,
-    version='2.12.7',
+    version='2.12.8',
     packages=find_packages(include=[package_name, f"{package_name}.*"]),
     data_files=data_files,
     install_requires=[

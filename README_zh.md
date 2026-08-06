@@ -12,7 +12,7 @@
 - 机器人模型资源
 - 离线单元测试和集成测试示例
 
-当前 SDK 版本：`2.12.7`。版本说明见 [VERSION.md](VERSION.md)。
+当前 SDK 版本：`2.12.8`。版本说明见 [VERSION.md](VERSION.md)。
 
 <p style="color: #b7791f;"><em>警告：当前交付方式基于源码工作区。执行 <code>colcon build --symlink-install</code> 后，配置和机器人模型资源仍从包源码树读取，因此请保持下方工作区结构。标准 wheel 安装或仅复制 <code>install/</code> 目录不是本版本支持的部署方式。</em></p>
 

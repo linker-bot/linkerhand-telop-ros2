@@ -131,6 +131,92 @@ def test_calibration_progress_collects_right_only_glove(monkeypatch):
     assert retarget.calibration_data_right[-1] == [float(i) for i in range(20)]
 
 
+def test_calibration_checklist_skips_untracked_o6_side_joints(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o6 import LeftHand
+    from linkerhand_retarget.motion.linkerforce.config.calibration_checklist import (
+        get_calibration_joint_indices,
+    )
+
+    joints = get_calibration_joint_indices(LeftHand(None))
+
+    assert 0 in joints
+    assert 20 in joints
+    assert 5 not in joints
+    assert 9 not in joints
+    assert 13 not in joints
+    assert 17 not in joints
+
+
+def test_linkerforce_hand_loads_calibration_filter_config(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o6 import LeftHand
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_g20 import RightHand
+
+    o6_hand = LeftHand(None)
+    g20_hand = RightHand(None)
+
+    assert o6_hand.calibration_filter_config["tracked_joints"] == (
+        0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20
+    )
+    assert g20_hand.calibration_filter_config["tracked_joints"] == tuple(range(21))
+
+
+def test_calibration_checklist_keeps_full_range_for_g20(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_g20 import RightHand
+    from linkerhand_retarget.motion.linkerforce.config.calibration_checklist import (
+        get_calibration_joint_indices,
+    )
+
+    assert get_calibration_joint_indices(RightHand(None)) == tuple(range(21))
+
+
+def test_calibration_stability_metrics_ignores_joints_outside_checklist(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    samples = []
+    for frame in range(4):
+        row = [1.0] * 21
+        row[5] = float(frame * 100)
+        samples.append(row)
+
+    variance, drift = retarget._calibration_stability_metrics(
+        samples,
+        tracked_joints=[0, 1, 2, 3],
+    )
+
+    assert variance == 0.0
+    assert drift == 0.0
+
+
+def test_calibration_stability_metrics_detects_tracked_joint_noise(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    samples = []
+    for frame in range(4):
+        row = [1.0] * 21
+        row[2] = float(frame * 100)
+        samples.append(row)
+
+    variance, drift = retarget._calibration_stability_metrics(
+        samples,
+        tracked_joints=[0, 1, 2, 3],
+    )
+
+    assert variance > 0.0
+    assert drift > 0.0
+
+
 def test_run_calibration_completes_with_right_only_glove_opose_then_open(monkeypatch):
     install_ros_stubs(monkeypatch)
 
