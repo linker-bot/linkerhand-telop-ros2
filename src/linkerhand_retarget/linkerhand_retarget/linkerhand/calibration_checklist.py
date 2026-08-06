@@ -1,4 +1,5 @@
 DEFAULT_CALIBRATION_JOINT_COUNT = 21
+CALIBRATION_FILTER_FEATURE_ENABLED = False
 
 DEFAULT_CALIBRATION_JOINT_LABELS = {
     0: "拇指侧摆0",
@@ -25,6 +26,7 @@ DEFAULT_CALIBRATION_JOINT_LABELS = {
 }
 
 DEFAULT_CALIBRATION_FILTER_CONFIG = {
+    "enabled": False,
     "tracked_joints": tuple(range(DEFAULT_CALIBRATION_JOINT_COUNT)),
     "pose_tracked_joints": {},
     "joint_labels": DEFAULT_CALIBRATION_JOINT_LABELS,
@@ -52,21 +54,34 @@ def _normalize_indices(indices):
 
 def normalize_calibration_filter_config(config=None):
     config = config or {}
-    tracked_joints = _normalize_indices(
+    configured_tracked_joints = _normalize_indices(
         config.get("tracked_joints", DEFAULT_CALIBRATION_FILTER_CONFIG["tracked_joints"])
     )
 
-    pose_tracked_joints = {}
+    configured_pose_tracked_joints = {}
     for pose_name, indices in config.get("pose_tracked_joints", {}).items():
         pose_key = _POSE_ALIASES.get(str(pose_name), str(pose_name))
-        pose_tracked_joints[pose_key] = _normalize_indices(indices)
+        configured_pose_tracked_joints[pose_key] = _normalize_indices(indices)
 
     joint_labels = dict(DEFAULT_CALIBRATION_JOINT_LABELS)
     joint_labels.update({int(k): str(v) for k, v in config.get("joint_labels", {}).items()})
 
+    configured_enabled = bool(config.get("enabled", DEFAULT_CALIBRATION_FILTER_CONFIG["enabled"]))
+    enabled = CALIBRATION_FILTER_FEATURE_ENABLED and configured_enabled
+    if enabled:
+        tracked_joints = configured_tracked_joints
+        pose_tracked_joints = configured_pose_tracked_joints
+    else:
+        tracked_joints = DEFAULT_CALIBRATION_FILTER_CONFIG["tracked_joints"]
+        pose_tracked_joints = {}
+
     return {
+        "enabled": enabled,
+        "configured_enabled": configured_enabled,
         "tracked_joints": tracked_joints,
         "pose_tracked_joints": pose_tracked_joints,
+        "configured_tracked_joints": configured_tracked_joints,
+        "configured_pose_tracked_joints": configured_pose_tracked_joints,
         "joint_labels": joint_labels,
     }
 

@@ -5,7 +5,7 @@ LinkerForce L20 手型映射模块 - ROS2版本
 import numpy as np
 import copy
 from linkerhand.handcore import HandCore
-from ..config.calibration_checklist import normalize_calibration_filter_config
+from linkerhand.calibration_checklist import normalize_calibration_filter_config
 from ..config.l20_config import (
     FINGER_CONFIGS, MAPPING_ORDER, MULTI_SEGMENT_CONFIG,
     ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT,

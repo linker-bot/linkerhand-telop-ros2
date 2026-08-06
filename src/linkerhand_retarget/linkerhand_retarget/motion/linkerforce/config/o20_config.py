@@ -365,6 +365,7 @@ MAPPING_ORDER = [
 ]
 
 CALIBRATION_FILTER_CONFIG = {
+    'enabled': False,
     'tracked_joints': tuple(range(21)),
     'pose_tracked_joints': {},
 }

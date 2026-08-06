@@ -8,7 +8,7 @@ import copy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from linkerhand.handcore import HandCore
-from ..config.calibration_checklist import normalize_calibration_filter_config
+from linkerhand.calibration_checklist import normalize_calibration_filter_config
 from ..config.o30i_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
 

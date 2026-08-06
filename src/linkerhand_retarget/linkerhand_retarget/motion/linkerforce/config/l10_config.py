@@ -205,6 +205,7 @@ MAPPING_ORDER = [
 ]
 
 CALIBRATION_FILTER_CONFIG = {
+    'enabled': False,
     'tracked_joints': (
         0, 1, 2, 3, 4, 5,
         6, 7, 8,

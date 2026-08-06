@@ -131,22 +131,17 @@ def test_calibration_progress_collects_right_only_glove(monkeypatch):
     assert retarget.calibration_data_right[-1] == [float(i) for i in range(20)]
 
 
-def test_calibration_checklist_skips_untracked_o6_side_joints(monkeypatch):
+def test_calibration_checklist_defaults_to_all_joints_even_with_hand_filter_config(monkeypatch):
     install_ros_stubs(monkeypatch)
 
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o6 import LeftHand
-    from linkerhand_retarget.motion.linkerforce.config.calibration_checklist import (
+    from linkerhand_retarget.linkerhand.calibration_checklist import (
         get_calibration_joint_indices,
     )
 
     joints = get_calibration_joint_indices(LeftHand(None))
 
-    assert 0 in joints
-    assert 20 in joints
-    assert 5 not in joints
-    assert 9 not in joints
-    assert 13 not in joints
-    assert 17 not in joints
+    assert joints == tuple(range(21))
 
 
 def test_linkerforce_hand_loads_calibration_filter_config(monkeypatch):
@@ -158,9 +153,11 @@ def test_linkerforce_hand_loads_calibration_filter_config(monkeypatch):
     o6_hand = LeftHand(None)
     g20_hand = RightHand(None)
 
-    assert o6_hand.calibration_filter_config["tracked_joints"] == (
+    assert o6_hand.calibration_filter_config["enabled"] is False
+    assert o6_hand.calibration_filter_config["configured_tracked_joints"] == (
         0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20
     )
+    assert o6_hand.calibration_filter_config["tracked_joints"] == tuple(range(21))
     assert g20_hand.calibration_filter_config["tracked_joints"] == tuple(range(21))
 
 
@@ -168,11 +165,39 @@ def test_calibration_checklist_keeps_full_range_for_g20(monkeypatch):
     install_ros_stubs(monkeypatch)
 
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_g20 import RightHand
-    from linkerhand_retarget.motion.linkerforce.config.calibration_checklist import (
+    from linkerhand_retarget.linkerhand.calibration_checklist import (
         get_calibration_joint_indices,
     )
 
     assert get_calibration_joint_indices(RightHand(None)) == tuple(range(21))
+
+
+def test_calibration_checklist_keeps_filter_code_behind_enable_switch():
+    from linkerhand_retarget.linkerhand.calibration_checklist import (
+        get_calibration_joint_indices,
+        normalize_calibration_filter_config,
+    )
+
+    disabled_config = {
+        "enabled": False,
+        "tracked_joints": (0, 1),
+        "pose_tracked_joints": {"fist": (2, 3)},
+    }
+    enabled_config = {
+        "enabled": True,
+        "tracked_joints": (0, 1),
+        "pose_tracked_joints": {"fist": (2, 3)},
+    }
+
+    normalized_enabled = normalize_calibration_filter_config(enabled_config)
+
+    assert get_calibration_joint_indices(disabled_config) == tuple(range(21))
+    assert get_calibration_joint_indices(disabled_config, pose="fist") == tuple(range(21))
+    assert get_calibration_joint_indices(enabled_config) == tuple(range(21))
+    assert get_calibration_joint_indices(enabled_config, pose="fist") == tuple(range(21))
+    assert normalized_enabled["configured_enabled"] is True
+    assert normalized_enabled["configured_tracked_joints"] == (0, 1)
+    assert normalized_enabled["configured_pose_tracked_joints"]["fist"] == (2, 3)
 
 
 def test_calibration_stability_metrics_ignores_joints_outside_checklist(monkeypatch):

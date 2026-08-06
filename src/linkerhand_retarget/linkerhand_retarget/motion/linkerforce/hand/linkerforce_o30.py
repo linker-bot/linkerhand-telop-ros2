@@ -6,7 +6,7 @@ v2.8.0升级了映射器算法
 import numpy as np
 import copy
 from linkerhand.handcore import HandCore
-from ..config.calibration_checklist import normalize_calibration_filter_config
+from linkerhand.calibration_checklist import normalize_calibration_filter_config
 from ..config.o30_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper

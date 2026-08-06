@@ -40,7 +40,7 @@ import serial.tools.list_ports
 import numpy as np
 import math
 import yaml
-from .config.calibration_checklist import (
+from linkerhand.calibration_checklist import (
     get_calibration_joint_indices,
     get_calibration_skipped_joint_indices,
     normalize_calibration_filter_config,
