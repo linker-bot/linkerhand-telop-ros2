@@ -274,11 +274,11 @@ class FrameHandler:
         if cmd == CommandCode.VERSION_QUERY.value:
             return self._handle_version(frame_data)
         elif cmd == CommandCode.POSITION_QUERY.value:
-            return self._handle_position(frame_data, is_a3=False)
+            return self._handle_position(frame_data, is_a3=False, frame=frame)
         elif cmd == CommandCode.FORCE_FEEDBACK.value:
             return self._handle_force(frame_data)
         elif cmd == CommandCode.A3_POSITION.value:
-            return self._handle_position(frame_data, is_a3=True)
+            return self._handle_position(frame_data, is_a3=True, frame=frame)
         elif cmd == CommandCode.A6_POSITION.value:
             return self._handle_a6_position(frame_data)
         else:
@@ -314,7 +314,12 @@ class FrameHandler:
         raw_type = self.detect_hand_type(status_code)
         return {'version': version, 'handtype': detected_type, 'raw_handtype': raw_type}
 
-    def _handle_position(self, frame_data: array.array, is_a3: bool = False) -> Optional[Dict[str, Any]]:
+    def _handle_position(
+        self,
+        frame_data: array.array,
+        is_a3: bool = False,
+        frame: Optional[array.array] = None,
+    ) -> Optional[Dict[str, Any]]:
         if len(frame_data) % 4 != 0:
             if self.logger:
                 self.logger.log('warn', f"Invalid position data length: {len(frame_data)}")
@@ -340,6 +345,8 @@ class FrameHandler:
                     raw_bytes = frame_data[i*4:(i+1)*4]
                     raw_hex = " ".join(f"{byte:02X}" for byte in raw_bytes)
                     payload_hex = " ".join(f"{byte:02X}" for byte in frame_data)
+                    full_frame = frame if frame is not None else frame_data
+                    frame_hex = " ".join(f"{byte:02X}" for byte in full_frame)
                     append_linkerforce_abnormal_log(
                         "[LinkerForce位置错报文] "
                         f"timestamp={datetime.now().isoformat()}, "
@@ -348,7 +355,8 @@ class FrameHandler:
                         f"degree={val:.6f}, "
                         f"valid_range=[{POSITION_MIN_DEGREE:.6f}, {POSITION_MAX_DEGREE:.6f}], "
                         f"raw_bytes={raw_hex}, "
-                        f"payload={payload_hex}"
+                        f"payload={payload_hex}, "
+                        f"frame={frame_hex}"
                     )
                     return None
                 floats.append(np.deg2rad(val))

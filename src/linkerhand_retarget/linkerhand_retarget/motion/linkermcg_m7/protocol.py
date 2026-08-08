@@ -136,7 +136,15 @@ def _is_status_payload(payload: bytes) -> bool:
 
 
 class LinkerMcgM7UdpClient:
-    def __init__(self, host="127.0.0.1", port=9011, buffer_size=4096, logger=None):
+    def __init__(
+        self,
+        host="127.0.0.1",
+        port=9011,
+        buffer_size=4096,
+        logger=None,
+        first_json_timeout_sec=2.0,
+        no_json_warn_interval_sec=5.0,
+    ):
         self.socket_udp: Optional[socket.socket] = None
         self.udp_thread: Optional[threading.Thread] = None
         self.udp_running = False
@@ -152,6 +160,11 @@ class LinkerMcgM7UdpClient:
         self.last_error = ""
         self._last_frame_time = None
         self._parse_error_count = 0
+        self.first_json_timeout_sec = float(first_json_timeout_sec)
+        self.no_json_warn_interval_sec = float(no_json_warn_interval_sec)
+        self._started_at: Optional[float] = None
+        self._last_no_json_warn_at: Optional[float] = None
+        self._last_status_packet_at: Optional[float] = None
 
     def _log_info(self, message: str):
         if self.logger is not None:
@@ -165,11 +178,46 @@ class LinkerMcgM7UdpClient:
         else:
             print(message)
 
+    def _record_status_packet(self, now: Optional[float] = None):
+        self._last_status_packet_at = time.time() if now is None else float(now)
+
+    def _warn_if_no_json_frame(self, now: Optional[float] = None):
+        if not self.udp_running or self.realmocapdata.is_update or self._started_at is None:
+            return
+
+        current_time = time.time() if now is None else float(now)
+        elapsed = current_time - self._started_at
+        if elapsed < self.first_json_timeout_sec:
+            return
+        if (
+            self._last_no_json_warn_at is not None
+            and current_time - self._last_no_json_warn_at < self.no_json_warn_interval_sec
+        ):
+            return
+
+        self._last_no_json_warn_at = current_time
+        if self._last_status_packet_at is None:
+            detail = "no heartbeat/status packet or M7 stroke JSON received"
+        else:
+            status_age = max(0.0, current_time - self._last_status_packet_at)
+            detail = (
+                "heartbeat/status packets are arriving "
+                f"(last {status_age:.1f}s ago), but no M7 stroke JSON received"
+            )
+        self._log_warn(
+            f"LinkerMCG M7 UDP connected but {detail} after {elapsed:.1f}s; "
+            "check sender protocol and required fields: "
+            "schemaId, handType, dof, timestampMs, labels, leftHand, rightHand"
+        )
+
     def udp_initial(self) -> bool:
         try:
             self.socket_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.socket_udp.settimeout(0.5)
             self.socket_udp.sendto(b"CONNECT", self.target_address)
+            self._started_at = time.time()
+            self._last_no_json_warn_at = None
+            self._last_status_packet_at = None
             self.udp_running = True
             self.isconnect = True
             self.udp_thread = threading.Thread(
@@ -194,6 +242,7 @@ class LinkerMcgM7UdpClient:
             try:
                 payload, _ = self.socket_udp.recvfrom(self.buffer_size)
             except socket.timeout:
+                self._warn_if_no_json_frame()
                 continue
             except OSError as exc:
                 if self.udp_running:
@@ -204,10 +253,13 @@ class LinkerMcgM7UdpClient:
             try:
                 envelope = parse_stroke_envelope(payload)
             except Exception as exc:
-                if not _is_status_payload(payload):
+                if _is_status_payload(payload):
+                    self._record_status_packet()
+                else:
                     self._parse_error_count += 1
                     if self._parse_error_count == 1 or self._parse_error_count % 100 == 0:
                         self._log_warn(f"LinkerMCG M7 UDP packet ignored: {exc}")
+                self._warn_if_no_json_frame()
                 continue
 
             now = time.time()

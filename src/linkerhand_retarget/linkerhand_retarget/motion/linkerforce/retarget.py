@@ -89,6 +89,8 @@ class Retarget():
         self.node = node
         self.lefthandtype = lefthand
         self.righthandtype = righthand
+        self.robot_name_l = lefthand
+        self.robot_name_r = righthand
         self.handcore = handcore
         self.runing = True
         self.lefthandpubprint = lefthandpubprint
@@ -274,7 +276,6 @@ class Retarget():
         self.debug_last_raw_l = [0.0] * 21
         self.debug_last_raw_r = [0.0] * 21
         self.debug_last_o6_pinky_raw_r = None
-        self.debug_endpoint_jump_tolerance = 0.5
         self.debug_last_endpoint_motor_l = None
         self.debug_last_endpoint_motor_r = None
         self.debug_last_endpoint_raw_l = None
@@ -336,38 +337,42 @@ class Retarget():
         self.touch_executor_thread = None
 
     def process_touch_data(self, json_str, hand_type):
-        try:
-            data = json.loads(json_str)
-            hand_result = {}
-            forcelist = []
-            # 处理每个手指的矩阵
-            for finger in ['thumb_matrix', 'index_matrix', 'middle_matrix', 'ring_matrix', 'little_matrix']:
-                matrix = np.array(data[finger])
-                # 计算接触面积（非零元素数量）
-                contact_area = np.count_nonzero(matrix)
-                # 计算总接触力
-                total_force = np.sum(matrix)
-                # 计算平均接触力（避免除以零）
-                avg_force = total_force / contact_area if contact_area > 0 else 0
-                max_force = np.max(matrix) * 4 if contact_area > 0 else 0
-                if max_force < 0:
-                    max_force = 0
-                if max_force > 500:
-                    max_force = 500
-                hand_result[finger] = {
-                    'contact_area': contact_area,
-                    'total_force': total_force,
-                    'avg_force': avg_force,
-                    'max_force': max_force
-                }
-                forcelist.append(float(max_force))
-            hand_result['forcelist'] = forcelist
+        # 触发阈值：合力 mass > TRIGGER_MASS_THRESHOLD (g) 才输出力反馈
+        # mass 量程 0-2000 g，误差约 10%，故取 200 作为触发底噪线
+        # 触发后使用带 onset 偏置的线性映射：mass ∈ [200, 2000] → force ∈ [FORCE_ONSET, 500]
+        # FORCE_ONSET 是接触瞬间的初始反馈力，用于让操作员即时感知到"碰到了"
+        # MAX_FORCE_OUTPUT 与老版本保持一致（500 对应舵机 50% 扭矩，末端约 1.8 N）
+        TRIGGER_MASS_THRESHOLD = 200
+        MASS_RANGE_MAX = 2000
+        FORCE_ONSET = 150
+        MAX_FORCE_OUTPUT = 500
+        FINGER_MASS_KEYS = [
+            ('thumb_matrix', 'thumb_mass'),
+            ('index_matrix', 'index_mass'),
+            ('middle_matrix', 'middle_mass'),
+            ('ring_matrix', 'ring_mass'),
+            ('little_matrix', 'little_mass'),
+        ]
+        with self.forcelock:
+            try:
+                data = json.loads(json_str)
+                self.results[hand_type] = {}
+                for finger_key, mass_key in FINGER_MASS_KEYS:
+                    mass = float(data.get(mass_key, 0))
+                    if mass > TRIGGER_MASS_THRESHOLD:
+                        ratio = (mass - TRIGGER_MASS_THRESHOLD) / (MASS_RANGE_MAX - TRIGGER_MASS_THRESHOLD)
+                        max_force = FORCE_ONSET + ratio * (MAX_FORCE_OUTPUT - FORCE_ONSET)
+                        max_force = min(max_force, MAX_FORCE_OUTPUT)
+                    else:
+                        max_force = 0
+                    self.results[hand_type][finger_key] = {
+                        'mass': mass,
+                        'max_force': max_force,
+                    }
 
-            with self.forcelock:
-                self.results[hand_type] = hand_result
-        except Exception as e:
-            self.node.get_logger().error("Error processing touch data: %s" % str(e))
-            return None
+            except Exception as e:
+                self.node.get_logger().error("Error processing touch data: %s" % str(e))
+                return None
 
     def _get_force_feedback_payload(self, hand_type):
         with self.forcelock:
@@ -504,13 +509,12 @@ class Retarget():
         if previous_motor is None or len(previous_motor) != len(current_motor):
             return
 
-        tolerance = float(getattr(self, "debug_endpoint_jump_tolerance", 0.5) or 0.5)
         hand_name = "左手" if hand_type == "left" else "右手"
         for index, (previous, current) in enumerate(zip(previous_motor, current_motor)):
             direction = None
-            if previous >= 255.0 - tolerance and current <= tolerance:
+            if previous == 255 and current == 0:
                 direction = "255->0"
-            elif previous <= tolerance and current >= 255.0 - tolerance:
+            elif previous == 0 and current == 255:
                 direction = "0->255"
             if direction is None:
                 continue
@@ -1088,11 +1092,13 @@ class Retarget():
         ) or "无"
 
         pose_desc = pose_name or "default"
-        node.get_logger().info(
-            f"LinkerForce标定抖动检测清单: hand={side}, pose={pose_desc}, "
-            f"tracked_count={len(tracked_joints)}, tracked=[{tracked_desc}], "
-            f"skipped=[{skipped_desc}]"
-        )
+        log_debug = getattr(node.get_logger(), "debug", None)
+        if callable(log_debug):
+            log_debug(
+                f"LinkerForce标定抖动检测清单: hand={side}, pose={pose_desc}, "
+                f"tracked_count={len(tracked_joints)}, tracked=[{tracked_desc}], "
+                f"skipped=[{skipped_desc}]"
+            )
 
     def _is_reader_connected(self, hand):
         reader = getattr(self, f"force_reader_{hand}", None)
@@ -1493,8 +1499,8 @@ class Retarget():
             self.node.get_logger().error("没有有效的标定数据差异，取消保存")
             return False
 
-        robot_name_r = getattr(self, "robot_name_r", None)
-        robot_name_l = getattr(self, "robot_name_l", None)
+        robot_name_r = self._resolve_robot_name_for_cache("right")
+        robot_name_l = self._resolve_robot_name_for_cache("left")
         data = {
             "timestamp": datetime.now().isoformat(),
             "robotname_r": getattr(robot_name_r, "name", str(robot_name_r)),
@@ -1581,8 +1587,8 @@ class Retarget():
         except:
             pass
 
-        robot_name_r = getattr(self, "robot_name_r", None)
-        robot_name_l = getattr(self, "robot_name_l", None)
+        robot_name_r = self._resolve_robot_name_for_cache("right")
+        robot_name_l = self._resolve_robot_name_for_cache("left")
         current_robot_r = getattr(robot_name_r, "name", str(robot_name_r)).lower()
         current_robot_l = getattr(robot_name_l, "name", str(robot_name_l)).lower()
         saved_robot_r = str(data.get("robotname_r", "") or "").strip().lower()
@@ -1628,6 +1634,17 @@ class Retarget():
         
         self.node.get_logger().info("标定数据加载成功")
         return True
+
+    def _resolve_robot_name_for_cache(self, side: str):
+        if side == "right":
+            robot_name = getattr(self, "robot_name_r", None)
+            if robot_name is None:
+                robot_name = getattr(self, "righthandtype", None)
+            return robot_name
+        robot_name = getattr(self, "robot_name_l", None)
+        if robot_name is None:
+            robot_name = getattr(self, "lefthandtype", None)
+        return robot_name
 
     def _get_forced_positions(self, pose_type: str, hand_type: str):
         """

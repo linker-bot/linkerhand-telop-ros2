@@ -143,6 +143,14 @@ class TestFrameHandlerPositionFrames:
     def _position_payload(degrees):
         return array.array("B", struct.pack("<21f", *degrees))
 
+    @staticmethod
+    def _position_frame(degrees):
+        payload = struct.pack("<21f", *degrees)
+        return array.array(
+            "B",
+            FrameHandler.pack_data(CommandCode.POSITION_QUERY.value, payload),
+        )
+
     def test_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
         handler = FrameHandler(HandType.right)
         previous = [42.0] * 21
@@ -176,8 +184,9 @@ class TestFrameHandlerPositionFrames:
         previous = [42.0] * 21
         handler.poslist = previous
         values = [0.0] * 20 + [361.0]
+        frame = self._position_frame(values)
 
-        result = handler._handle_position(self._position_payload(values))
+        result = handler.handle_frame(frame)
 
         assert result is None
         assert handler.poslist == previous
@@ -185,6 +194,7 @@ class TestFrameHandlerPositionFrames:
         assert "[LinkerForce位置错报文]" in log_text
         assert "idx=20" in log_text
         assert "degree=361.000000" in log_text
+        assert f"frame={' '.join(f'{byte:02X}' for byte in frame)}" in log_text
 
     def test_position_frame_rejects_any_negative_degree_without_overwriting_poslist(self, monkeypatch, tmp_path):
         log_file = tmp_path / "linkerforce_abnormal.log"
@@ -197,8 +207,9 @@ class TestFrameHandlerPositionFrames:
         handler.poslist = previous
         values = [0.0] * 21
         values[7] = -1.0
+        frame = self._position_frame(values)
 
-        result = handler._handle_position(self._position_payload(values))
+        result = handler.handle_frame(frame)
 
         assert result is None
         assert handler.poslist == previous
@@ -206,6 +217,7 @@ class TestFrameHandlerPositionFrames:
         assert "[LinkerForce位置错报文]" in log_text
         assert "idx=7" in log_text
         assert "degree=-1.000000" in log_text
+        assert f"frame={' '.join(f'{byte:02X}' for byte in frame)}" in log_text
 
     def test_a6_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
         handler = FrameHandler(HandType.right)

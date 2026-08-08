@@ -7,6 +7,33 @@ import pytest
 from linkerhand_retarget.linkerhand.constants import RobotName
 
 
+def install_linkerforce_ros_stubs(monkeypatch):
+    rclpy = types.ModuleType("rclpy")
+    rclpy_node = types.ModuleType("rclpy.node")
+    rclpy_node.Node = type("Node", (), {})
+    sensor_msgs = types.ModuleType("sensor_msgs")
+    sensor_msgs_msg = types.ModuleType("sensor_msgs.msg")
+    sensor_msgs_msg.JointState = type("JointState", (), {})
+    std_msgs = types.ModuleType("std_msgs")
+    std_msgs_msg = types.ModuleType("std_msgs.msg")
+    for name in (
+        "String",
+        "Int32MultiArray",
+        "Header",
+        "Float32MultiArray",
+        "MultiArrayLayout",
+        "MultiArrayDimension",
+    ):
+        setattr(std_msgs_msg, name, type(name, (), {}))
+
+    monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+    monkeypatch.setitem(sys.modules, "rclpy.node", rclpy_node)
+    monkeypatch.setitem(sys.modules, "sensor_msgs", sensor_msgs)
+    monkeypatch.setitem(sys.modules, "sensor_msgs.msg", sensor_msgs_msg)
+    monkeypatch.setitem(sys.modules, "std_msgs", std_msgs)
+    monkeypatch.setitem(sys.modules, "std_msgs.msg", std_msgs_msg)
+
+
 def test_o6_right_pinky_trace_captures_raw_poslist_without_verbose_warning(monkeypatch):
     def install_ros_stubs():
         rclpy = types.ModuleType("rclpy")
@@ -195,7 +222,6 @@ def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch, tmp
     retarget = Retarget.__new__(Retarget)
     retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
     retarget.debug_enabled = True
-    retarget.debug_endpoint_jump_tolerance = 0.5
 
     previous_raw = [1.0, 2.0, 3.0]
     current_raw = [4.0, 5.0, 6.0]
@@ -235,3 +261,26 @@ def test_endpoint_motor_jump_logs_previous_and_current_raw_data(monkeypatch, tmp
     assert "方向=0->255" in log_text
     assert "raw_previous=[1.0, 2.0, 3.0]" in log_text
     assert "raw_current=[7.0, 8.0, 9.0]" in log_text
+
+
+def test_endpoint_motor_jump_requires_exact_integer_endpoints(monkeypatch):
+    install_linkerforce_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce.retarget import Retarget
+
+    warnings = []
+
+    class FakeLogger:
+        def warn(self, message):
+            warnings.append(message)
+
+    retarget = Retarget.__new__(Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
+    retarget.debug_enabled = True
+
+    retarget._trace_endpoint_motor_jump("right", [1.0], [254, 10])
+    retarget._trace_endpoint_motor_jump("right", [2.0], [0, 10])
+    retarget._trace_endpoint_motor_jump("right", [3.0], [1, 10])
+    retarget._trace_endpoint_motor_jump("right", [4.0], [255, 10])
+
+    assert warnings == []

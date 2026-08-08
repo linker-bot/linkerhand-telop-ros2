@@ -7,6 +7,7 @@ import pytest
 
 from linkerhand_retarget.linkerhand.constants import MotionSource, RobotName
 from linkerhand_retarget.motion.linkermcg_m7.protocol import (
+    LinkerMcgM7UdpClient,
     M7MotionData,
     parse_stroke_envelope,
 )
@@ -154,6 +155,52 @@ def test_m7_motion_data_updates_both_hands_from_envelope():
     assert data.dof == 6
     assert data.jointangle_lHand == [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
     assert data.jointangle_rHand == [20.0, 21.0, 22.0, 23.0, 24.0, 25.0]
+
+
+def test_m7_udp_client_warns_when_no_status_or_json_arrives_after_connect_timeout():
+    logger = FakeLogger()
+    client = LinkerMcgM7UdpClient(
+        host="127.0.0.1",
+        port=9011,
+        logger=logger,
+        first_json_timeout_sec=2.0,
+        no_json_warn_interval_sec=5.0,
+    )
+    client.udp_running = True
+    client._started_at = 100.0
+
+    client._warn_if_no_json_frame(now=101.9)
+    assert logger.warnings == []
+
+    client._warn_if_no_json_frame(now=102.0)
+    assert len(logger.warnings) == 1
+    assert "no heartbeat/status packet or M7 stroke JSON received" in logger.warnings[0]
+
+    client._warn_if_no_json_frame(now=103.0)
+    assert len(logger.warnings) == 1
+
+    client._warn_if_no_json_frame(now=107.1)
+    assert len(logger.warnings) == 2
+
+
+def test_m7_udp_client_warns_when_only_heartbeat_arrives_without_json():
+    logger = FakeLogger()
+    client = LinkerMcgM7UdpClient(
+        host="127.0.0.1",
+        port=9011,
+        logger=logger,
+        first_json_timeout_sec=2.0,
+        no_json_warn_interval_sec=5.0,
+    )
+    client.udp_running = True
+    client._started_at = 100.0
+    client._last_status_packet_at = 101.5
+
+    client._warn_if_no_json_frame(now=102.0)
+
+    assert len(logger.warnings) == 1
+    assert "heartbeat/status packets are arriving" in logger.warnings[0]
+    assert "no M7 stroke JSON received" in logger.warnings[0]
 
 
 @pytest.mark.parametrize(

@@ -75,6 +75,7 @@ class FakeLogger:
         self.infos = []
         self.warnings = []
         self.errors = []
+        self.debugs = []
 
     def info(self, msg):
         self.infos.append(msg)
@@ -89,7 +90,7 @@ class FakeLogger:
         self.errors.append(msg)
 
     def debug(self, _msg):
-        pass
+        self.debugs.append(_msg)
 
 
 def make_hand():
@@ -219,6 +220,29 @@ def test_calibration_stability_metrics_ignores_joints_outside_checklist(monkeypa
 
     assert variance == 0.0
     assert drift == 0.0
+
+
+def test_calibration_checklist_is_debug_only(monkeypatch):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o20 import LeftHand
+
+    logger = FakeLogger()
+
+    class FakeNode:
+        def get_logger(self):
+            return logger
+
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = FakeNode()
+
+    hand = LeftHand(None)
+    retarget._log_calibration_checklist("left", hand, list(range(21)), pose_name="fist")
+
+    assert logger.infos == []
+    assert logger.debugs
+    assert "LinkerForce标定抖动检测清单" in logger.debugs[0]
 
 
 def test_calibration_stability_metrics_detects_tracked_joint_noise(monkeypatch):
@@ -351,6 +375,38 @@ def test_save_to_tmp_accepts_right_only_calibration_without_left_reader(monkeypa
     assert data["jointanglefist_l"] is None
 
 
+def test_save_to_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch, tmp_path):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand.constants import RobotName
+
+    logger = FakeLogger()
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: logger)
+    retarget.force_reader_left = SimpleNamespace(handtype="Left")
+    retarget.force_reader_right = SimpleNamespace(handtype="Right")
+    retarget.lefthand = make_hand()
+    retarget.righthand = make_hand()
+    retarget.lefthandtype = RobotName.o20
+    retarget.righthandtype = RobotName.o30i
+    retarget.lefthand.calibrationoriginal = [1.0, 2.0]
+    retarget.lefthand.calibrationopose = [3.0, 4.0]
+    retarget.lefthand.calibrationfistpose = [5.0, 6.0]
+    retarget.righthand.calibrationoriginal = [7.0, 8.0]
+    retarget.righthand.calibrationopose = [9.0, 10.0]
+    retarget.righthand.calibrationfistpose = [11.0, 12.0]
+
+    tmp_file = tmp_path / "jointangle_data.tmp"
+    monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
+
+    assert retarget._save_to_tmp() is True
+
+    data = json.loads(tmp_file.read_text())
+    assert data["robotname_r"] == "o30i"
+    assert data["robotname_l"] == "o20"
+
+
 def test_load_from_tmp_rejects_mismatched_robot_models(monkeypatch, tmp_path):
     install_ros_stubs(monkeypatch)
 
@@ -389,6 +445,48 @@ def test_load_from_tmp_rejects_mismatched_robot_models(monkeypatch, tmp_path):
     assert retarget._load_from_tmp() is False
     assert retarget.righthand.calibrationoriginal is None
     assert retarget.lefthand.calibrationoriginal is None
+
+
+def test_load_from_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch, tmp_path):
+    install_ros_stubs(monkeypatch)
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+    from linkerhand.constants import RobotName
+
+    logger = FakeLogger()
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: logger)
+    retarget.force_reader_left = None
+    retarget.force_reader_right = None
+    retarget.lefthand = make_hand()
+    retarget.righthand = make_hand()
+    retarget.lefthandtype = RobotName.o20
+    retarget.righthandtype = RobotName.o30i
+
+    tmp_file = tmp_path / "jointangle_data.tmp"
+    monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
+    tmp_file.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-06-24T17:51:31.146022",
+                "robotname_r": "o30i",
+                "robotname_l": "o20",
+                "jointangleoriginal_r": [1.0, 2.0, 3.0],
+                "jointangleopose_r": [4.0, 5.0, 6.0],
+                "jointanglefist_r": [7.0, 8.0, 9.0],
+                "jointangleoriginal_l": [1.0, 2.0, 3.0],
+                "jointangleopose_l": [4.0, 5.0, 6.0],
+                "jointanglefist_l": [7.0, 8.0, 9.0],
+            },
+            indent=2,
+        )
+    )
+
+    assert retarget._load_from_tmp() is True
+    assert retarget.righthand.calibrationoriginal == [1.0, 2.0, 3.0]
+    assert retarget.lefthand.calibrationoriginal == [1.0, 2.0, 3.0]
+    assert retarget.righthand.calibrationfistpose == [7.0, 8.0, 9.0]
+    assert retarget.lefthand.calibrationopose == [4.0, 5.0, 6.0]
 
 
 def test_save_to_tmp_persists_robot_models(monkeypatch, tmp_path):
