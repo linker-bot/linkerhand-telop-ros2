@@ -5,7 +5,7 @@ FINGER_CONFIGS = {
         'joints': [0, 1, 2],
         'weights': {
             'v1': [0, 0, 1],
-            'v2': [0, 1, 0]
+            'v2': [0, 0, 1]
         },
         'robot_idx': 0,
         'type': 'thumb',
