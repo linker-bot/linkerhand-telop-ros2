@@ -4,28 +4,72 @@ import sys
 import os
 from pathlib import Path
 
-# 强制使用src目录的路径
-def setup_src_paths():
-    """确保使用src目录而不是build目录"""
-    # 获取工作空间的绝对路径
-    current_file = Path(__file__).absolute()
-    workspace_dir = current_file.parent.parent.parent.parent
-    
-    # 添加src目录到Python路径
-    src_package_dir = workspace_dir / "src" / "linkerhand_retarget" / "linkerhand_retarget"
-    if src_package_dir.exists():
-        paths_to_add = [
-            src_package_dir,
-            src_package_dir / "linkerhand",
-        ]
-        
-        for path in paths_to_add:
-            if path.exists() and str(path) not in sys.path:
-                sys.path.insert(0, str(path))
-    
+PACKAGE_NAME = "linkerhand_retarget"
+
+
+def _find_src_package_dir() -> Path:
+    """Locate the source-tree directory of this package at runtime.
+
+    Per the project README, configuration and asset files are always read
+    from the package source tree, even after ``colcon build``. This script
+    may be launched from ``build/`` (via the editable egg-link install) or
+    directly from ``src/``, and the repository may itself be cloned as a
+    nested subdirectory of an outer ROS2 workspace. We therefore discover
+    the source location dynamically instead of assuming a fixed workspace
+    layout.
+
+    Resolution order:
+      1. If this file already sits in a source tree (sibling ``config/``
+         contains ``hand_config.yml``), use that directory.
+      2. Otherwise walk up the ancestor chain looking for a ``src/``
+         sibling and search beneath it for a ``package.xml`` whose
+         ``<name>`` matches this package; the inner package directory next
+         to that manifest is returned.
+    """
+    here = Path(__file__).resolve()
+
+    own_dir = here.parent
+    if (own_dir / "config" / "hand_config.yml").is_file():
+        return own_dir
+
+    name_tag = f"<name>{PACKAGE_NAME}</name>"
+    for ancestor in here.parents:
+        src_dir = ancestor / "src"
+        if not src_dir.is_dir():
+            continue
+
+        conventional = src_dir / PACKAGE_NAME / PACKAGE_NAME
+        if (conventional / "config" / "hand_config.yml").is_file():
+            return conventional
+
+        for pkg_xml in src_dir.rglob("package.xml"):
+            try:
+                content = pkg_xml.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if name_tag in content:
+                inner = pkg_xml.parent / PACKAGE_NAME
+                if (inner / "config" / "hand_config.yml").is_file():
+                    return inner
+
+    raise FileNotFoundError(
+        f"Cannot locate the source-tree directory of '{PACKAGE_NAME}'. "
+        f"Searched starting from {here}. Ensure the package source is "
+        f"available under a 'src/' directory in the workspace."
+    )
+
+
+def _setup_src_paths() -> Path:
+    """Resolve the source directory and prepend its key subdirs to sys.path."""
+    src_package_dir = _find_src_package_dir()
+    for path in (src_package_dir, src_package_dir / "linkerhand"):
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
     return src_package_dir
 
-workspace_dir = setup_src_paths()
+
+SRC_PACKAGE_DIR = _setup_src_paths()
 
 
 import time
@@ -100,7 +144,7 @@ class HandRetargetNode(Node):
         self.get_logger().info(f"LinkerHand Retarget SDK 版本: {get_version()}")
         print("Ready Create HandRetargetNode!")
 
-        package_share_dir = workspace_dir
+        package_share_dir = SRC_PACKAGE_DIR
 
         self.robot_dir = package_share_dir  / "assets" / "robots" / "hands"
         self.base_config = package_share_dir 
