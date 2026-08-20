@@ -292,7 +292,7 @@ MOTOR_CONSTRAINTS = {
         {'min': 0, 'max': 255, 'enabled': False},   # motor 6: 食指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 7: 无名指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 8: 小指侧摆
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 9: 拇指旋转
+        {'min': 220, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
     ],
     'right': [
         {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指弯曲
@@ -304,6 +304,6 @@ MOTOR_CONSTRAINTS = {
         {'min': 0, 'max': 255, 'enabled': False},   # motor 6: 食指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 7: 无名指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 8: 小指侧摆
-        {'min': 0, 'max': 255, 'enabled': False},   # motor 9: 拇指旋转
+        {'min': 220, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
     ]
 }

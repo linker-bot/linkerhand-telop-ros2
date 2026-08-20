@@ -698,6 +698,102 @@ def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monk
     assert retarget.rightbaudrate == 2000000
 
 
+def test_linkerforce_init_passes_packet_log_debug_config_to_readers(monkeypatch):
+    def install_ros_stubs():
+        rclpy = types.ModuleType("rclpy")
+        rclpy_node = types.ModuleType("rclpy.node")
+        rclpy_node.Node = type("Node", (), {})
+        sensor_msgs = types.ModuleType("sensor_msgs")
+        sensor_msgs_msg = types.ModuleType("sensor_msgs.msg")
+        sensor_msgs_msg.JointState = type("JointState", (), {})
+        std_msgs = types.ModuleType("std_msgs")
+        std_msgs_msg = types.ModuleType("std_msgs.msg")
+        for name in (
+            "String",
+            "Int32MultiArray",
+            "Header",
+            "Float32MultiArray",
+            "MultiArrayLayout",
+            "MultiArrayDimension",
+        ):
+            setattr(std_msgs_msg, name, type(name, (), {}))
+
+        monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+        monkeypatch.setitem(sys.modules, "rclpy.node", rclpy_node)
+        monkeypatch.setitem(sys.modules, "sensor_msgs", sensor_msgs)
+        monkeypatch.setitem(sys.modules, "sensor_msgs.msg", sensor_msgs_msg)
+        monkeypatch.setitem(sys.modules, "std_msgs", std_msgs)
+        monkeypatch.setitem(sys.modules, "std_msgs.msg", std_msgs_msg)
+
+    install_ros_stubs()
+
+    from linkerhand_retarget.motion.linkerforce import retarget as retarget_module
+
+    created_reader_kwargs = []
+
+    class FakeForceSerialReader:
+        def __init__(self, *_args, **kwargs):
+            created_reader_kwargs.append(kwargs)
+
+    class FakeLogger:
+        def info(self, _msg):
+            pass
+
+        def warn(self, _msg):
+            pass
+
+        def error(self, _msg):
+            pass
+
+        def debug(self, _msg):
+            pass
+
+    monkeypatch.setattr(retarget_module, "ForceSerialReader", FakeForceSerialReader)
+    monkeypatch.setattr(retarget_module.time, "sleep", lambda _seconds: None)
+
+    retarget = retarget_module.Retarget.__new__(retarget_module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
+    retarget.baseconfig = {
+        "debug": {"linkerforce_packet_log_debug": True},
+        "serial": {
+            "auto_scan": False,
+            "baudrates": [2000000],
+            "exclude_ports": [],
+            "left": {"port": "/dev/ttyUSB1", "baudrate": 2000000},
+            "right": {"port": "/dev/ttyUSB0", "baudrate": 2000000},
+        },
+        "calibration": {},
+    }
+    retarget.cmd_ports = None
+    retarget.cmd_baudrate = None
+    retarget.cmd_auto_scan = None
+    retarget.calibration = False
+    retarget.leftport = None
+    retarget.force_reader_left = None
+    retarget.force_reader_right = None
+    retarget._init_hand = lambda *_args, **_kwargs: False
+    retarget._load_from_tmp = lambda: True
+    retarget._initialize_ready_mappers = lambda: None
+
+    retarget.linkerforce_init()
+
+    assert [kwargs["log_position_packets"] for kwargs in created_reader_kwargs] == [True, True]
+
+
+def test_base_config_disables_linkerforce_packet_log_debug_by_default():
+    config_path = (
+        Path(__file__).parents[2]
+        / "linkerhand_retarget"
+        / "config"
+        / "base_config.yml"
+    )
+    import yaml
+
+    base_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    assert base_config["debug"]["linkerforce_packet_log_debug"] is False
+
+
 def test_mujoco_display_keeps_legacy_hand_config(tmp_path):
     right_urdf = tmp_path / "right.urdf"
     right_urdf.write_text("<robot/>", encoding="utf-8")

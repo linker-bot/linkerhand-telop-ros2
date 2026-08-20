@@ -3,8 +3,10 @@ import array
 import math
 import struct
 import threading
+from datetime import datetime
 from pathlib import Path
 from linkerhand_retarget.linkerhand.constants import HandType
+from linkerhand_retarget.linkerhand import linkerforce as linkerforce_module
 from linkerhand_retarget.linkerhand.linkerforce import (
     CircularBuffer,
     CommandCode,
@@ -17,6 +19,7 @@ from linkerhand_retarget.linkerhand.linkerforce import (
     FRAME_HEADER,
     LINKERFORCE_ABNORMAL_LOG_FILE_PATH,
     PINKY_JUMP_LOG_FILE_PATH,
+    resolve_position_query_command_for_version,
     VERSION_QUERY_RETRY_COUNT,
 )
 
@@ -151,6 +154,32 @@ class TestFrameHandlerPositionFrames:
             FrameHandler.pack_data(CommandCode.POSITION_QUERY.value, payload),
         )
 
+    @staticmethod
+    def _compressed_position_frame(hundredth_degrees):
+        payload = struct.pack("<21H", *hundredth_degrees)
+        return array.array(
+            "B",
+            FrameHandler.pack_data(
+                CommandCode.COMPRESSED_POSITION_QUERY.value,
+                payload,
+            ),
+        )
+
+    def test_compressed_position_frame_decodes_little_endian_uint16_hundredths(
+        self,
+    ):
+        handler = FrameHandler(HandType.right)
+        raw_values = [0] * 21
+        raw_values[4] = 12345
+        raw_values[20] = 36000
+        frame = self._compressed_position_frame(raw_values)
+
+        result = handler.handle_frame(frame)
+
+        assert result == {"poslist": handler.poslist}
+        assert handler.poslist[4] == pytest.approx(math.radians(123.45))
+        assert handler.poslist[20] == pytest.approx(math.radians(360.0))
+
     def test_position_frame_rejects_non_21_channel_payload_without_overwriting_poslist(self):
         handler = FrameHandler(HandType.right)
         previous = [42.0] * 21
@@ -265,11 +294,73 @@ class TestFrameHandlerPositionFrames:
         assert messages == []
         assert not log_file.exists()
 
+    def test_position_packet_logging_is_disabled_by_default(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.LINKERFORCE_PACKET_LOG_DIR",
+            tmp_path,
+        )
+        handler = FrameHandler(HandType.right)
+        frame = self._position_frame([0.0] * 21)
+
+        result = handler.handle_frame(frame)
+
+        assert result == {"poslist": handler.poslist}
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_position_packet_logging_records_context_by_hand_and_hour(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.LINKERFORCE_PACKET_LOG_DIR",
+            tmp_path,
+        )
+
+        class FakeDateTime:
+            @staticmethod
+            def now():
+                return datetime(2026, 8, 17, 14, 23, 45, 123456)
+
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.datetime",
+            FakeDateTime,
+        )
+        degrees = [0.0] * 20 + [90.0]
+        frame = self._position_frame(degrees)
+        left_handler = FrameHandler(HandType.left, log_position_packets=True)
+        right_handler = FrameHandler(HandType.right, log_position_packets=True)
+
+        left_result = left_handler.handle_frame(frame)
+        right_result = right_handler.handle_frame(frame)
+
+        assert left_result == {"poslist": left_handler.poslist}
+        assert right_result == {"poslist": right_handler.poslist}
+        left_log = tmp_path / "left" / "2026-08-17" / "14.log"
+        right_log = tmp_path / "right" / "2026-08-17" / "14.log"
+        assert left_log.exists()
+        assert right_log.exists()
+        assert not (tmp_path / "linkerforce_packet.log").exists()
+
+        left_log_text = left_log.read_text(encoding="utf-8")
+        right_log_text = right_log.read_text(encoding="utf-8")
+        assert "[LinkerForce位置报文]" in left_log_text
+        assert "timestamp=2026-08-17T14:23:45.123456" in left_log_text
+        assert "handtype=left" in left_log_text
+        assert "handtype=right" not in left_log_text
+        assert f"frame={' '.join(f'{byte:02X}' for byte in frame)}" in left_log_text
+        assert "parsed=[" in left_log_text
+        assert "1.570796" in left_log_text
+        assert "handtype=right" in right_log_text
+        assert "handtype=left" not in right_log_text
+
     def test_default_abnormal_log_path_is_under_linkerforce_tmp(self):
         assert isinstance(LINKERFORCE_ABNORMAL_LOG_FILE_PATH, Path)
         assert LINKERFORCE_ABNORMAL_LOG_FILE_PATH.name == "linkerforce_abnormal.log"
         assert LINKERFORCE_ABNORMAL_LOG_FILE_PATH.parent.name == "tmp"
         assert PINKY_JUMP_LOG_FILE_PATH == LINKERFORCE_ABNORMAL_LOG_FILE_PATH
+
+    def test_default_packet_log_dir_is_under_linkerforce_log(self):
+        packet_log_dir = linkerforce_module.LINKERFORCE_PACKET_LOG_DIR
+        assert isinstance(packet_log_dir, Path)
+        assert packet_log_dir.name == "linkerforce_packet"
+        assert packet_log_dir.parent.name == "log"
 
     def test_left_pinky_end_jump_does_not_log_right_hand_trace(self):
         messages = []
@@ -329,6 +420,97 @@ class TestConstants:
 
 
 class TestForceSerialReaderVersionQuery:
+    def test_position_packet_logging_flag_is_passed_to_frame_handler(self):
+        reader = ForceSerialReader(HandType.right, log_position_packets=True)
+
+        assert reader._handler.log_position_packets is True
+
+    def test_position_query_defaults_to_legacy_0x03(self):
+        reader = ForceSerialReader(HandType.right)
+        reader.handtype = "Right"
+
+        assert reader._get_query_data() == FrameHandler.pack_data(
+            CommandCode.POSITION_QUERY.value,
+        )
+
+    @pytest.mark.parametrize(
+        "version, expected_command, expected_message",
+        [
+            ("2.1.5", CommandCode.COMPRESSED_POSITION_QUERY.value, "主动查询切换为 0x05"),
+            ("2.1.4", CommandCode.POSITION_QUERY.value, "主动查询使用 0x03"),
+            ("unknown", CommandCode.POSITION_QUERY.value, "未能识别 LinkerForce 版本 unknown"),
+        ],
+    )
+    def test_version_switches_position_query_mode_and_logs_hint(
+        self,
+        version,
+        expected_command,
+        expected_message,
+    ):
+        messages = []
+
+        reader = ForceSerialReader(
+            HandType.right,
+            logger=lambda level, message: messages.append((level, message)),
+        )
+        reader.version = version
+
+        assert reader.position_query_command == expected_command
+        assert any(expected_message in message for _level, message in messages)
+        assert resolve_position_query_command_for_version(version) == expected_command
+
+    def test_query_version_sync_can_suppress_version_hint_logs(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        messages = []
+
+        class FakeSerialPort:
+            def __init__(self):
+                payload = struct.pack("<IB", 20105, 1)
+                self.buffer = bytearray(FrameHandler.pack_data(CommandCode.VERSION_QUERY.value, payload))
+                self.is_open = True
+
+            @property
+            def in_waiting(self):
+                return len(self.buffer)
+
+            def write(self, _data):
+                pass
+
+            def read(self, size):
+                data = bytes(self.buffer[:size])
+                del self.buffer[:size]
+                return data
+
+            def reset_input_buffer(self):
+                pass
+
+            def reset_output_buffer(self):
+                pass
+
+        reader = ForceSerialReader(
+            HandType.right,
+            logger=lambda level, message: messages.append((level, message)),
+        )
+        reader.serial_port = FakeSerialPort()
+
+        assert reader.query_version_sync(response_wait=0, log_version_hint=False) is True
+        assert reader.version == "2.1.5"
+        assert reader.position_query_command == CommandCode.COMPRESSED_POSITION_QUERY.value
+        assert messages == []
+
+    def test_compressed_position_query_mode_gets_selected_after_version_detection(self):
+        reader = ForceSerialReader(HandType.right)
+        reader.handtype = "Right"
+        reader.version = "2.1.5"
+
+        assert reader._get_query_data() == FrameHandler.pack_data(
+            CommandCode.COMPRESSED_POSITION_QUERY.value,
+        )
+
     def test_sync_version_query_retries_until_retry_limit_without_thread(self, monkeypatch):
         monkeypatch.setattr(
             "linkerhand_retarget.linkerhand.linkerforce.time.sleep",

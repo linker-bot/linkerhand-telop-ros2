@@ -163,6 +163,11 @@ class RightHand:
         """
         if not self.smooth_enabled:
             return raw_positions
+
+        if not getattr(self, "_smooth_initialized", False):
+            self.smooth_positions = [float(raw) for raw in raw_positions]
+            self._smooth_initialized = True
+            return [int(round(raw)) for raw in raw_positions]
         
         smoothed = []
         for i, raw in enumerate(raw_positions):
@@ -384,6 +389,11 @@ class LeftHand:
         """
         if not self.smooth_enabled:
             return raw_positions
+
+        if not getattr(self, "_smooth_initialized", False):
+            self.smooth_positions = [float(raw) for raw in raw_positions]
+            self._smooth_initialized = True
+            return [int(round(raw)) for raw in raw_positions]
         
         smoothed = []
         for i, raw in enumerate(raw_positions):

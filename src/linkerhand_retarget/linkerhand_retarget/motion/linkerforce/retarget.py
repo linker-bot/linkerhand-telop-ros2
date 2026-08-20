@@ -32,6 +32,7 @@ from colorama import Fore, init
 from datetime import datetime, timedelta
 import threading
 import copy
+import importlib
 import pickle
 import os
 import json
@@ -49,7 +50,28 @@ from linkerhand.calibration_checklist import (
 
 TMP_FILE_PATH = Path(__file__).parent / "tmp" / "jointangle_data.tmp"
 SAMPLE_FILE_PATH = Path(__file__).parent.parent.parent / "config" / "calibration_sample.yml"
+MOTOR_OUTPUT_LIMIT_LOG_FILE_PATH = Path(__file__).parent / "log" / "motor_output_limit.log"
 FORCE_FEEDBACK_THREAD_HZ = 30.0
+DEFAULT_MOTOR_OUTPUT_FRAME_RATE = 30.0
+DEFAULT_MOTOR_OUTPUT_TRAVEL_RANGE = 255.0
+DEFAULT_OUTPUT_RUNTIME_LIMIT_MS = 300.0
+MOTOR_OUTPUT_RUNTIME_CONFIG_MODULES = {
+    RobotName.o7: "o7_config",
+    RobotName.l7: "o7_config",
+    RobotName.o7v1: "o7_config",
+    RobotName.o7v3: "o7_config",
+    RobotName.o6: "o6_config",
+    RobotName.l6: "l6_config",
+    RobotName.l10: "l10_config",
+    RobotName.l10v7: "l10_config",
+    RobotName.l20lite: "l10_config",
+    RobotName.l20: "l20_config",
+    RobotName.o20: "o20_config",
+    RobotName.o30: "o30_config",
+    RobotName.o30i: "o30i_config",
+    RobotName.l25: "g20_config",
+    RobotName.g20: "g20_config",
+}
 
 
 class Retarget():
@@ -104,7 +126,8 @@ class Retarget():
         
         self.show_fist_calibration = self.baseconfig.get('calibration', {}).get('show_fist', True)
         self.fist_extend_ratio = self.baseconfig.get('calibration', {}).get('fist_extend_ratio', 0.5)
-        
+        debug_config = self.baseconfig.get('debug', {})
+        self.motor_output_limit_debug = debug_config.get('motor_output_limit_debug', False)
         # 命令行串口参数（候选列表，系统自动识别左右手）
         self.cmd_ports = cmd_ports
         self.cmd_baudrate = cmd_baudrate
@@ -288,6 +311,18 @@ class Retarget():
         self.debug_o6_publish_rate_window_count = 0
         self.debug_last_force04_l = None
         self.debug_last_force04_r = None
+
+        self.motor_output_frame_rate = self._get_motor_output_frame_rate()
+        self.motor_output_runtime_limits_l = self._load_motor_output_runtime_limits(
+            self.lefthandtype
+        )
+        self.motor_output_runtime_limits_r = self._load_motor_output_runtime_limits(
+            self.righthandtype
+        )
+        self.last_limited_motor_l = None
+        self.last_limited_motor_r = None
+        self.motor_output_filter_state_l = None
+        self.motor_output_filter_state_r = None
 
 
 
@@ -588,9 +623,11 @@ class Retarget():
     def linkerforce_init(self):
         # 从配置读取串口参数
         serial_config = self.baseconfig.get('serial', {})
+        debug_config = self.baseconfig.get('debug', {})
         baudrates = serial_config.get('baudrates', [2000000, 1000000, 921600, 460800])
         exclude_ports = serial_config.get('exclude_ports', [])
         serial_debug = serial_config.get('serial_debug', False)
+        linkerforce_packet_log_debug = debug_config.get('linkerforce_packet_log_debug', False)
         config_auto_scan = serial_config.get('auto_scan', False)
         
         # 自动扫描开关：命令行参数 > 配置文件 > 默认false
@@ -627,7 +664,10 @@ class Retarget():
         if self.cmd_baudrate:
             baudrates = [self.cmd_baudrate]
         
-        self.node.get_logger().info(f"波特率组合: {baudrates}, 自动扫描={auto_scan}, 调试={serial_debug}")
+        self.node.get_logger().info(
+            f"波特率组合: {baudrates}, 自动扫描={auto_scan}, "
+            f"调试={serial_debug}, 报文日志={linkerforce_packet_log_debug}"
+        )
         
         # 日志回调函数
         def serial_logger(level, msg):
@@ -643,7 +683,12 @@ class Retarget():
         # 如果提供了候选端口列表，从中自动检测左右手
         if candidate_ports:
             left_found, right_found = self._init_from_candidates(
-                candidate_ports, baudrates, exclude_ports, serial_debug, serial_logger
+                candidate_ports,
+                baudrates,
+                exclude_ports,
+                serial_debug,
+                serial_logger,
+                linkerforce_packet_log_debug,
             )
         else:
             # 使用配置文件的预设端口
@@ -652,7 +697,8 @@ class Retarget():
                 excludelist=exclude_ports,
                 baudrates=baudrates,
                 isdebug=serial_debug,
-                logger=serial_logger
+                logger=serial_logger,
+                log_position_packets=linkerforce_packet_log_debug,
             )
             left_found = self._init_hand(
                 self.force_reader_left, 
@@ -669,7 +715,8 @@ class Retarget():
                 excludelist=exclude_right,
                 baudrates=baudrates,
                 isdebug=serial_debug,
-                logger=serial_logger
+                logger=serial_logger,
+                log_position_packets=linkerforce_packet_log_debug,
             )
             right_found = self._init_hand(
                 self.force_reader_right, 
@@ -699,7 +746,15 @@ class Retarget():
                 self.calibration = "auto_calibrate"
                 self.node.get_logger().info("未找到有效缓存，将进行自动标定")
     
-    def _init_from_candidates(self, candidate_ports, baudrates, exclude_ports, serial_debug, serial_logger):
+    def _init_from_candidates(
+        self,
+        candidate_ports,
+        baudrates,
+        exclude_ports,
+        serial_debug,
+        serial_logger,
+        linkerforce_packet_log_debug=False,
+    ):
         """从候选端口列表中自动检测并初始化左右手"""
         left_found = False
         right_found = False
@@ -721,14 +776,15 @@ class Retarget():
                 excludelist=[],
                 baudrates=baudrates,
                 isdebug=serial_debug,
-                logger=serial_logger
+                logger=serial_logger,
+                log_position_packets=linkerforce_packet_log_debug,
             )
             
             detected = False
             for baudrate in baudrates:
                 try:
                     if temp_reader.openserial(port=port, baudrate=baudrate):
-                        if temp_reader.query_version_sync():
+                        if temp_reader.query_version_sync(log_version_hint=False):
                             detected_ports[port] = (temp_reader.handtype, baudrate, temp_reader.version)
                             self.node.get_logger().info(f"检测到 {port}: {temp_reader.handtype} @ {baudrate}")
                             detected = True
@@ -751,7 +807,8 @@ class Retarget():
                     excludelist=exclude_ports,
                     baudrates=baudrates,
                     isdebug=serial_debug,
-                    logger=serial_logger
+                    logger=serial_logger,
+                    log_position_packets=linkerforce_packet_log_debug,
                 )
                 if self.force_reader_left.openserial(port=port, baudrate=baudrate):
                     self.force_reader_left.handtype = handtype
@@ -772,7 +829,8 @@ class Retarget():
                     excludelist=exclude_ports + ([self.leftport] if left_found else []),
                     baudrates=baudrates,
                     isdebug=serial_debug,
-                    logger=serial_logger
+                    logger=serial_logger,
+                    log_position_packets=linkerforce_packet_log_debug,
                 )
                 if self.force_reader_right.openserial(port=port, baudrate=baudrate):
                     self.force_reader_right.handtype = handtype
@@ -928,12 +986,16 @@ class Retarget():
             
             self.lefthand.joint_update(left_positions)
             self.lefthand.speed_update()
+            left_motor_positions = self._apply_motor_output_runtime_limits(
+                "left",
+                self.lefthand.g_jointpositions,
+            )
             if self.lefthandpubprint and self.pubprintcount % 5 == 0:
-                print(f"左手位置: {self.lefthand.g_jointpositions}")
+                print(f"左手位置: {left_motor_positions}")
             msg_l = JointState()
             msg_l.header.stamp = self.node.get_clock().now().to_msg()
             msg_l.name = self._joint_names_for(self.lefthand)
-            msg_l.position = [float(num) for num in self.lefthand.g_jointpositions]
+            msg_l.position = [float(num) for num in left_motor_positions]
             self._trace_endpoint_motor_jump(
                 "left",
                 left_positions,
@@ -966,13 +1028,17 @@ class Retarget():
             )
             self.righthand.joint_update(right_positions)
             self.righthand.speed_update()
+            right_motor_positions = self._apply_motor_output_runtime_limits(
+                "right",
+                self.righthand.g_jointpositions,
+            )
             if self.righthandpubprint and self.pubprintcount % 5 == 0:
-                print(f"右手位置: {self.righthand.g_jointpositions}")
+                print(f"右手位置: {right_motor_positions}")
             # print( self.debug_last_force04_r )
             msg_r = JointState()
             msg_r.header.stamp = self.node.get_clock().now().to_msg()
             msg_r.name = self._joint_names_for(self.righthand)
-            msg_r.position = [float(num) for num in self.righthand.g_jointpositions]
+            msg_r.position = [float(num) for num in right_motor_positions]
             # msg_r.velocity = [float(num) for num in self.righthand.g_jointvelocity]
             self._trace_endpoint_motor_jump(
                 "right",
@@ -997,6 +1063,247 @@ class Retarget():
         if topic_joint_names and len(topic_joint_names) == len(positions):
             return list(topic_joint_names)
         return [f'joint{i + 1}' for i in range(len(positions))]
+
+    def _get_motor_output_frame_rate(self):
+        motor_output_config = self.baseconfig.get('motor_output', {})
+        frame_rate = motor_output_config.get(
+            'frame_rate',
+            DEFAULT_MOTOR_OUTPUT_FRAME_RATE,
+        )
+        try:
+            frame_rate = float(frame_rate)
+        except (TypeError, ValueError):
+            return DEFAULT_MOTOR_OUTPUT_FRAME_RATE
+
+        if not math.isfinite(frame_rate) or frame_rate <= 0:
+            return DEFAULT_MOTOR_OUTPUT_FRAME_RATE
+        return frame_rate
+
+    def _load_motor_output_runtime_limits(self, robot_name):
+        config_module_name = MOTOR_OUTPUT_RUNTIME_CONFIG_MODULES.get(robot_name)
+        if not config_module_name:
+            return []
+
+        try:
+            module = importlib.import_module(
+                f".config.{config_module_name}",
+                package=__package__,
+            )
+        except ImportError:
+            return []
+
+        motor_constraints = getattr(module, "MOTOR_CONSTRAINTS", {})
+        left_constraints = motor_constraints.get("left", [])
+        right_constraints = motor_constraints.get("right", [])
+        if len(left_constraints) != len(right_constraints):
+            return []
+
+        motor_count = len(left_constraints)
+        motor_output_config = getattr(self, "baseconfig", {}).get("motor_output", {})
+        runtime_limit = motor_output_config.get(
+            "OUTPUT_RUNTIME_LIMITS",
+            {"max_runtime_ms": DEFAULT_OUTPUT_RUNTIME_LIMIT_MS},
+        )
+        if isinstance(runtime_limit, dict):
+            max_runtime_ms = runtime_limit.get("max_runtime_ms", 0.0)
+        else:
+            max_runtime_ms = runtime_limit
+
+        try:
+            max_runtime_ms = float(max_runtime_ms)
+        except (TypeError, ValueError):
+            max_runtime_ms = 0.0
+
+        if (
+            motor_count <= 0
+            or not math.isfinite(max_runtime_ms)
+            or max_runtime_ms <= 0
+        ):
+            return []
+
+        return [{"max_runtime_ms": max_runtime_ms} for _ in range(motor_count)]
+
+    def _apply_motor_output_runtime_limits(self, hand_type, motor_positions):
+        if hand_type == "left":
+            limits = getattr(self, "motor_output_runtime_limits_l", [])
+            last_attr = "last_limited_motor_l"
+            state_attr = "motor_output_filter_state_l"
+            hand_label = "left"
+        elif hand_type == "right":
+            limits = getattr(self, "motor_output_runtime_limits_r", [])
+            last_attr = "last_limited_motor_r"
+            state_attr = "motor_output_filter_state_r"
+            hand_label = "right"
+        else:
+            return [float(value) for value in motor_positions]
+
+        current = [float(value) for value in motor_positions]
+        previous = getattr(self, last_attr, None)
+        state = self._ensure_motor_output_filter_state(state_attr, len(current))
+
+        if previous is None:
+            setattr(self, last_attr, current.copy())
+            self._reset_motor_output_filter_state(state)
+            return current
+
+        if not limits or len(previous) != len(current):
+            setattr(self, last_attr, current.copy())
+            self._reset_motor_output_filter_state(state)
+            return current
+
+        frame_rate = getattr(
+            self,
+            "motor_output_frame_rate",
+            DEFAULT_MOTOR_OUTPUT_FRAME_RATE,
+        )
+        if not math.isfinite(frame_rate) or frame_rate <= 0:
+            frame_rate = DEFAULT_MOTOR_OUTPUT_FRAME_RATE
+
+        limited = []
+        frame_interval_ms = 1000.0 / frame_rate
+        for index, value in enumerate(current):
+            previous_value = previous[index]
+            limit_config = limits[index] if index < len(limits) else None
+            mode = state["mode"][index]
+            direction = state["direction"][index]
+            limited_value = value
+            reason = None
+
+            if isinstance(limit_config, dict):
+                max_runtime_ms = limit_config.get("max_runtime_ms", 0.0)
+            else:
+                max_runtime_ms = limit_config
+
+            try:
+                max_runtime_ms = float(max_runtime_ms)
+            except (TypeError, ValueError):
+                max_runtime_ms = 0.0
+
+            if max_runtime_ms > 0:
+                max_delta = (
+                    DEFAULT_MOTOR_OUTPUT_TRAVEL_RANGE
+                    * frame_interval_ms
+                    / max_runtime_ms
+                )
+                delta = value - previous_value
+
+                if mode == "stable":
+                    if abs(delta) > max_delta:
+                        state["mode"][index] = "pending"
+                        state["direction"][index] = 1 if delta > 0 else -1
+                        limited_value = previous_value
+                        reason = "pending"
+                    else:
+                        limited_value = self._limit_step(previous_value, value, max_delta)
+                        reason = "slew"
+
+                elif mode == "pending":
+                    if abs(delta) <= max_delta:
+                        state["mode"][index] = "stable"
+                        state["direction"][index] = 0
+                        limited_value = self._limit_step(previous_value, value, max_delta)
+                        reason = "pulse_recovered"
+                    elif (delta > 0 and direction > 0) or (delta < 0 and direction < 0):
+                        state["mode"][index] = "tracking"
+                        limited_value = self._limit_step(previous_value, value, max_delta)
+                        reason = "confirm"
+                    else:
+                        state["mode"][index] = "pending"
+                        state["direction"][index] = 1 if delta > 0 else -1
+                        limited_value = previous_value
+                        reason = "recheck"
+
+                else:  # tracking
+                    if abs(delta) <= max_delta:
+                        state["mode"][index] = "stable"
+                        state["direction"][index] = 0
+                        limited_value = value
+                        reason = "settled"
+                    elif (delta > 0 and direction > 0) or (delta < 0 and direction < 0):
+                        limited_value = self._limit_step(previous_value, value, max_delta)
+                        reason = "tracking"
+                    else:
+                        state["mode"][index] = "pending"
+                        state["direction"][index] = 1 if delta > 0 else -1
+                        limited_value = previous_value
+                        reason = "recheck"
+
+                if limited_value != value:
+                    self._log_motor_output_limit_cutoff(
+                        hand_label,
+                        index,
+                        previous_value,
+                        value,
+                        limited_value,
+                        max_delta,
+                        max_runtime_ms,
+                        frame_rate,
+                        reason,
+                    )
+
+            limited.append(limited_value)
+
+        setattr(self, last_attr, limited.copy())
+        return limited
+
+    def _ensure_motor_output_filter_state(self, state_attr, length):
+        state = getattr(self, state_attr, None)
+        if (
+            state is None
+            or len(state.get("mode", [])) != length
+            or len(state.get("direction", [])) != length
+        ):
+            state = {
+                "mode": ["stable"] * length,
+                "direction": [0] * length,
+            }
+            setattr(self, state_attr, state)
+        return state
+
+    @staticmethod
+    def _reset_motor_output_filter_state(state):
+        for index in range(len(state.get("mode", []))):
+            state["mode"][index] = "stable"
+            state["direction"][index] = 0
+
+    @staticmethod
+    def _limit_step(previous_value, target_value, max_delta):
+        if abs(target_value - previous_value) <= max_delta:
+            return target_value
+        stepped = previous_value + (max_delta if target_value > previous_value else -max_delta)
+        return float(int(round(stepped)))
+
+    def _log_motor_output_limit_cutoff(
+        self,
+        hand_label,
+        motor_index,
+        previous_value,
+        current_value,
+        limited_value,
+        max_delta,
+        max_runtime_ms,
+        frame_rate,
+        reason=None,
+    ):
+        if not getattr(self, "motor_output_limit_debug", False):
+            return
+
+        message = (
+            f"timestamp={datetime.now().isoformat(timespec='milliseconds')} "
+            "event=motor_output_limit "
+            f"hand={hand_label}, motor={motor_index}, "
+            f"previous={previous_value:.3f}, current={current_value:.3f}, "
+            f"limited={limited_value:.3f}, max_delta={max_delta:.3f}, "
+            f"max_runtime_ms={max_runtime_ms:.3f}, frame_rate={frame_rate:.3f}"
+        )
+        if reason:
+            message += f", reason={reason}"
+        try:
+            MOTOR_OUTPUT_LIMIT_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with MOTOR_OUTPUT_LIMIT_LOG_FILE_PATH.open("a", encoding="utf-8") as file:
+                file.write(message + "\n")
+        except OSError:
+            return
 
     def _calculate_weighted_average(self, data_list):
         """
@@ -1692,10 +1999,10 @@ class Retarget():
         self._start_touch_subscription_worker()
         self._start_force_feedback_worker()
         self.node.create_timer(
-            1.0/30,
+            1.0 / self.motor_output_frame_rate,
             self.process_callback,
             callback_group=self.retarget_callback_group,
-        )  # 30Hz
+        )
         return True
 
     def stop_serial_threads(self):

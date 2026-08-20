@@ -1,17 +1,23 @@
 calibration:
   fist_extend_ratio: 0.5
-  show_fist: true
+  show_fist: false
 debug:
   joint_motor_debug_l: true
   joint_motor_debug_r: true
   joint_pub_debug: false
+  linkerforce_packet_log_debug: false
   mapper_debug: false
+  motor_output_limit_debug: false
 humanset:
   bodyfile: body_unity_pose
   targethandfile: human_hand_info
 linkereg:
   password: i
   port: null
+motor_output:
+  OUTPUT_RUNTIME_LIMITS:
+    max_runtime_ms: 300.0
+  frame_rate: 30
 mujoco:
   enabled: false
   fps: 30
@@ -54,8 +60,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: l10
-  robotname_r: l10
+  robotname_l: o6
+  robotname_r: o6
   sapientype: left
   usecan: false
   usegui: false

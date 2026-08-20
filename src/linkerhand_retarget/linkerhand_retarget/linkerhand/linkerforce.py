@@ -21,12 +21,19 @@ class CommandCode(Enum):
     SET_FLAG = 0x02
     POSITION_QUERY = 0x03
     FORCE_FEEDBACK = 0x04
+    COMPRESSED_POSITION_QUERY = 0x05
     A3_POSITION = 0xA3
     A6_POSITION = 0xA6
     A7_FORCE = 0xA7
 
 
 VALID_COMMAND_VALUES = {command.value for command in CommandCode}
+POSITION_QUERY_COMMAND_VALUES = {
+    CommandCode.POSITION_QUERY.value,
+    CommandCode.COMPRESSED_POSITION_QUERY.value,
+}
+DEFAULT_POSITION_QUERY_COMMAND = CommandCode.POSITION_QUERY.value
+POSITION_QUERY_COMPRESSED_MIN_VERSION = (2, 1, 5)
 
 
 # 协议常量
@@ -37,6 +44,7 @@ POSITION_JOINT_COUNT = 21
 POSITION_MIN_DEGREE = 0.0
 POSITION_MAX_DEGREE = 360.0
 LINKERFORCE_ABNORMAL_LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "tmp" / "linkerforce_abnormal.log"
+LINKERFORCE_PACKET_LOG_DIR = Path(__file__).resolve().parent.parent / "motion" / "linkerforce" / "log" / "linkerforce_packet"
 PINKY_JUMP_LOG_FILE_PATH = LINKERFORCE_ABNORMAL_LOG_FILE_PATH
 
 # 时序常量
@@ -69,6 +77,69 @@ def append_linkerforce_abnormal_log(message: str) -> None:
             file.write(message + "\n")
     except OSError:
         return
+
+
+def format_linkerforce_hand_name(handtype: Any) -> str:
+    if isinstance(handtype, HandType):
+        return handtype.name
+    hand_text = str(handtype).lower()
+    if "left" in hand_text:
+        return "left"
+    if "right" in hand_text:
+        return "right"
+    return "unknown"
+
+
+def get_linkerforce_packet_log_file_path(handtype: Any, timestamp: datetime) -> Path:
+    hand_name = format_linkerforce_hand_name(handtype)
+    return LINKERFORCE_PACKET_LOG_DIR / hand_name / timestamp.strftime("%Y-%m-%d") / f"{timestamp.strftime('%H')}.log"
+
+
+def append_linkerforce_packet_log(handtype: Any, timestamp: datetime, message: str) -> None:
+    try:
+        log_file = get_linkerforce_packet_log_file_path(handtype, timestamp)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with log_file.open("a", encoding="utf-8") as file:
+            file.write(message + "\n")
+    except OSError:
+        return
+
+
+def normalize_position_query_command(command: Any) -> int:
+    if isinstance(command, CommandCode):
+        command = command.value
+    elif isinstance(command, str):
+        try:
+            command = int(command, 0)
+        except ValueError:
+            return DEFAULT_POSITION_QUERY_COMMAND
+
+    try:
+        command = int(command)
+    except (TypeError, ValueError):
+        return DEFAULT_POSITION_QUERY_COMMAND
+
+    if command in POSITION_QUERY_COMMAND_VALUES:
+        return command
+    return DEFAULT_POSITION_QUERY_COMMAND
+
+
+def parse_linkerforce_version(version: Any):
+    if version is None:
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", str(version))
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def resolve_position_query_command_for_version(version: Any) -> int:
+    parsed_version = parse_linkerforce_version(version)
+    if parsed_version is None:
+        return CommandCode.POSITION_QUERY.value
+    if parsed_version >= POSITION_QUERY_COMPRESSED_MIN_VERSION:
+        return CommandCode.COMPRESSED_POSITION_QUERY.value
+    return CommandCode.POSITION_QUERY.value
 
 
 # ============== 环形缓冲区 ==============
@@ -228,9 +299,15 @@ class SerialScanner:
 # ============== 帧处理器 ==============
 
 class FrameHandler:
-    def __init__(self, handtype: HandType, logger: Optional['Logger'] = None):
+    def __init__(
+        self,
+        handtype: HandType,
+        logger: Optional['Logger'] = None,
+        log_position_packets: bool = False,
+    ):
         self._handtype = handtype  # 期望的手类型
         self.logger = logger
+        self.log_position_packets = log_position_packets
         self._data_lock = threading.Lock()
         self._poslist: List[float] = [0.0] * 21
         self._forcelist: List[float] = [0.0] * 5
@@ -277,6 +354,8 @@ class FrameHandler:
             return self._handle_position(frame_data, is_a3=False, frame=frame)
         elif cmd == CommandCode.FORCE_FEEDBACK.value:
             return self._handle_force(frame_data)
+        elif cmd == CommandCode.COMPRESSED_POSITION_QUERY.value:
+            return self._handle_compressed_position(frame_data, frame=frame)
         elif cmd == CommandCode.A3_POSITION.value:
             return self._handle_position(frame_data, is_a3=True, frame=frame)
         elif cmd == CommandCode.A6_POSITION.value:
@@ -300,6 +379,29 @@ class FrameHandler:
             f"len={data_len}, "
             f"checksum={checksum_text}, "
             f"frame={frame_hex}"
+        )
+
+    def _log_position_packet(
+        self,
+        frame_data: array.array,
+        parsed_values: List[float],
+        source: str,
+        frame: Optional[array.array],
+    ) -> None:
+        raw_packet = frame if frame is not None else frame_data
+        frame_hex = " ".join(f"{byte:02X}" for byte in raw_packet)
+        parsed_text = ", ".join(f"{float(value):.6f}" for value in parsed_values)
+        timestamp = datetime.now()
+        handtype = format_linkerforce_hand_name(self._handtype)
+        append_linkerforce_packet_log(
+            self._handtype,
+            timestamp,
+            "[LinkerForce位置报文] "
+            f"timestamp={timestamp.isoformat()}, "
+            f"handtype={handtype}, "
+            f"source={source}, "
+            f"frame={frame_hex}, "
+            f"parsed=[{parsed_text}]"
         )
 
     def _handle_version(self, frame_data: array.array) -> Dict[str, Any]:
@@ -364,11 +466,74 @@ class FrameHandler:
                 if self.logger:
                     self.logger.log('warn', f"Unpack error: {e}")
                 return None
+        if self.log_position_packets:
+            self._log_position_packet(
+                frame_data,
+                floats,
+                "0xA3" if is_a3 else "0x03",
+                frame,
+            )
         self.poslist = floats
         result: Dict[str, Any] = {'poslist': floats}
         if is_a3:
             result['a6count'] = True
         return result
+
+    def _handle_compressed_position(
+        self,
+        frame_data: array.array,
+        frame: Optional[array.array] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if len(frame_data) % 2 != 0:
+            if self.logger:
+                self.logger.log(
+                    'warn',
+                    f"Invalid compressed position data length: {len(frame_data)}",
+                )
+            return None
+        channel_count = len(frame_data) // 2
+        if channel_count != POSITION_JOINT_COUNT:
+            if self.logger:
+                self.logger.log(
+                    'warn',
+                    "Invalid compressed position channel count: "
+                    f"{channel_count}, expected {POSITION_JOINT_COUNT}"
+                )
+            return None
+
+        floats: List[float] = []
+        for i in range(channel_count):
+            try:
+                raw_value = struct.unpack('<H', frame_data[i * 2:(i + 1) * 2])[0]
+                degree = raw_value / 100.0
+                if degree < POSITION_MIN_DEGREE or degree > POSITION_MAX_DEGREE:
+                    raw_bytes = frame_data[i * 2:(i + 1) * 2]
+                    raw_hex = " ".join(f"{byte:02X}" for byte in raw_bytes)
+                    payload_hex = " ".join(f"{byte:02X}" for byte in frame_data)
+                    full_frame = frame if frame is not None else frame_data
+                    frame_hex = " ".join(f"{byte:02X}" for byte in full_frame)
+                    append_linkerforce_abnormal_log(
+                        "[LinkerForce位置错报文] "
+                        f"timestamp={datetime.now().isoformat()}, "
+                        "source=0x05, "
+                        f"idx={i}, "
+                        f"degree={degree:.6f}, "
+                        f"valid_range=[{POSITION_MIN_DEGREE:.6f}, {POSITION_MAX_DEGREE:.6f}], "
+                        f"raw_bytes={raw_hex}, "
+                        f"payload={payload_hex}, "
+                        f"frame={frame_hex}"
+                    )
+                    return None
+                floats.append(np.deg2rad(degree))
+            except struct.error as e:
+                if self.logger:
+                    self.logger.log('warn', f"Unpack error: {e}")
+                return None
+
+        if self.log_position_packets:
+            self._log_position_packet(frame_data, floats, "0x05", frame)
+        self.poslist = floats
+        return {'poslist': floats}
 
     def _handle_force(self, frame_data: array.array) -> Optional[Dict[str, Any]]:
         if len(frame_data) % 2 != 0:
@@ -440,8 +605,8 @@ class FrameHandler:
     def pack_version_query(self) -> bytes:
         return self.pack_data(CommandCode.VERSION_QUERY.value)
 
-    def pack_position_query(self) -> bytes:
-        return self.pack_data(CommandCode.POSITION_QUERY.value)
+    def pack_position_query(self, command: int = CommandCode.POSITION_QUERY.value) -> bytes:
+        return self.pack_data(normalize_position_query_command(command))
 
     def pack_force_feedback(self) -> bytes:
         payload = struct.pack(f'{len(self._forcelist)}f', *self._forcelist)
@@ -617,18 +782,21 @@ class SerialConnection:
 class ForceSerialReader:
     def __init__(self, gettype: HandType, excludelist: Optional[List[str]] = None, 
                  baudrates: Optional[List[int]] = None, isdebug: bool = False, 
-                 logger: Optional[Callable[[str, str], None]] = None):
+                 logger: Optional[Callable[[str, str], None]] = None,
+                 log_position_packets: bool = False):
         self.gettype = gettype
         self.isdebug = isdebug
         self.connflag = False
         self.position_frame_count = 0
-        self.version: Optional[str] = None
+        self._version: Optional[str] = None
         self.handtype: Optional[HandType] = None
+        self.position_query_command = DEFAULT_POSITION_QUERY_COMMAND
+        self._suppress_version_hint = False
 
         # 初始化模块
         self._logger = Logger(logger, isdebug)
         self._scanner = SerialScanner(baudrates, excludelist, self._logger)
-        self._handler = FrameHandler(gettype, self._logger)
+        self._handler = FrameHandler(gettype, self._logger, log_position_packets=log_position_packets)
         self._connection = SerialConnection(self._logger, isdebug)
         self._serial_write_lock = threading.Lock()
 
@@ -663,8 +831,42 @@ class ForceSerialReader:
     def realforcelist(self, value: List[int]):
         self._handler.realforcelist = value
 
+    @property
+    def version(self) -> Optional[str]:
+        return self._version
+
+    @version.setter
+    def version(self, value: Optional[str]):
+        previous_version = self._version
+        self._version = value
+        self.position_query_command = resolve_position_query_command_for_version(value)
+
+        if value is None or value == previous_version or self._suppress_version_hint:
+            return
+
+        self._log_position_query_mode(value, self.position_query_command)
+
     def _log(self, level: str, msg: str) -> None:
         self._logger.log(level, msg)
+
+    def _log_position_query_mode(self, version: Any, command: int) -> None:
+        parsed_version = parse_linkerforce_version(version)
+        if command == CommandCode.COMPRESSED_POSITION_QUERY.value:
+            message = (
+                f"识别到 LinkerForce 版本 {version}，"
+                "主动查询切换为 0x05"
+            )
+        elif parsed_version is None:
+            message = (
+                f"未能识别 LinkerForce 版本 {version}，"
+                "主动查询使用 0x03"
+            )
+        else:
+            message = (
+                f"识别到 LinkerForce 版本 {version}，"
+                "主动查询使用 0x03"
+            )
+        self._log('info', message)
 
     # 扫描方法
     def is_usb_device(self, port_name: str) -> bool:
@@ -684,13 +886,21 @@ class ForceSerialReader:
             self._log('debug', f"发现 {len(available_ports)} 个未检查的串口: {available_ports}")
 
         for port in available_ports:
-            success, baudrate, errorcode = self.query_serial_port(port, timeout)
+            success, baudrate, errorcode = self.query_serial_port(
+                port,
+                timeout,
+                log_version_hint=False,
+            )
             
             if not success and errorcode != -2:
                 if self.isdebug:
                     self._log('debug', "首次连接失败，尝试重试...")
                 time.sleep(RETRY_DELAY)
-                success, baudrate, errorcode = self.query_serial_port(port, timeout)
+                success, baudrate, errorcode = self.query_serial_port(
+                    port,
+                    timeout,
+                    log_version_hint=False,
+                )
 
             if errorcode == -2:
                 self._log('warn', f"警告: 串口 {port} 权限不足，请手动执行: sudo chmod 666 {port}")
@@ -722,6 +932,7 @@ class ForceSerialReader:
         self,
         retry_count: int = VERSION_QUERY_RETRY_COUNT,
         response_wait: float = WARMUP_DELAY,
+        log_version_hint: bool = True,
     ) -> bool:
         if not self.serial_port:
             return False
@@ -731,29 +942,39 @@ class ForceSerialReader:
         self.version = None
         self.connflag = False
         parser = FrameParser()
+        previous_suppress_version_hint = self._suppress_version_hint
+        self._suppress_version_hint = not log_version_hint
 
         try:
-            self.serial_port.reset_input_buffer()
-            self.serial_port.reset_output_buffer()
-        except Exception:
-            pass
+            try:
+                self.serial_port.reset_input_buffer()
+                self.serial_port.reset_output_buffer()
+            except Exception:
+                pass
 
-        for _ in range(retry_count):
-            self.serial_port.write(self.pack_01_data())
+            for _ in range(retry_count):
+                self.serial_port.write(self.pack_01_data())
 
-            deadline = time.time() + response_wait
-            while True:
-                self._poll_serial_frames_once(parser)
-                if self.handtype is not None:
-                    return True
-                if time.time() >= deadline:
-                    break
-                time.sleep(READ_INTERVAL)
+                deadline = time.time() + response_wait
+                while True:
+                    self._poll_serial_frames_once(parser)
+                    if self.handtype is not None:
+                        return True
+                    if time.time() >= deadline:
+                        break
+                    time.sleep(READ_INTERVAL)
 
-        self._poll_serial_frames_once(parser)
-        return self.handtype is not None
+            self._poll_serial_frames_once(parser)
+            return self.handtype is not None
+        finally:
+            self._suppress_version_hint = previous_suppress_version_hint
 
-    def query_serial_port(self, port_name: str, timeout: float = 1) -> tuple:
+    def query_serial_port(
+        self,
+        port_name: str,
+        timeout: float = 1,
+        log_version_hint: bool = True,
+    ) -> tuple:
         best_baudrate: Optional[int] = None
         errorcode: Optional[int] = None
 
@@ -773,7 +994,10 @@ class ForceSerialReader:
                 if self.isdebug:
                     self._log('debug', f"同步侦测串口 {port_name} 波特率 {baudrate} 是否联通...")
 
-                detected = self.query_version_sync(response_wait=max(timeout, READ_INTERVAL))
+                detected = self.query_version_sync(
+                    response_wait=max(timeout, READ_INTERVAL),
+                    log_version_hint=log_version_hint,
+                )
                 if ser and ser.is_open:
                     ser.close()
                 self.serial_port = None
@@ -846,7 +1070,7 @@ class ForceSerialReader:
 
     def _get_query_data(self) -> Optional[bytes]:
         if self.handtype is not None:
-            return self.pack_03_data()
+            return self.pack_position_query_data()
         return None
 
     def _write_serial(self, data: bytes) -> bool:
@@ -878,7 +1102,13 @@ class ForceSerialReader:
         return FrameHandler.pack_data(CommandCode.SET_FLAG.value, payload)
 
     def pack_03_data(self) -> bytes:
-        return self._handler.pack_position_query()
+        return self._handler.pack_position_query(CommandCode.POSITION_QUERY.value)
+
+    def pack_05_data(self) -> bytes:
+        return self._handler.pack_position_query(CommandCode.COMPRESSED_POSITION_QUERY.value)
+
+    def pack_position_query_data(self) -> bytes:
+        return self._handler.pack_position_query(self.position_query_command)
 
     def pack_A3_data(self) -> bytes:
         return FrameHandler.pack_data(CommandCode.A3_POSITION.value)
