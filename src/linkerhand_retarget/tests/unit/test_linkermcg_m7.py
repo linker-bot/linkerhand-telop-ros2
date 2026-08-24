@@ -246,6 +246,11 @@ def test_expected_dof_accepts_same_named_robot_enum_from_runtime_import():
     assert expected_dof_for_robot(RuntimeRobotName.o30) == 20
 
 
+def test_expected_dof_rejects_l30_until_m7_has_18_dof_schema():
+    with pytest.raises(ValueError, match="l30"):
+        expected_dof_for_robot(RobotName.l30)
+
+
 def test_expected_dof_rejects_retired_o30_variant_name():
     retired_name = "o30" + "i"
 

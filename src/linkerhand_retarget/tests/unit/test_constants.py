@@ -37,6 +37,7 @@ class TestRobotName:
         assert RobotName.l21.value is not None
         assert RobotName.o20.value is not None
         assert RobotName.o30.value is not None
+        assert RobotName.l30.value is not None
         assert RETIRED_O30_VARIANT_NAME not in RobotName.__members__
 
     def test_robot_names_list(self):
@@ -83,6 +84,7 @@ class TestRobotNameMap:
         assert ROBOT_NAME_MAP[RobotName.l25] == "linker_hand_l25"
         assert ROBOT_NAME_MAP[RobotName.o20] == "linker_hand_o20"
         assert ROBOT_NAME_MAP[RobotName.o30] == "linker_hand_o30"
+        assert ROBOT_NAME_MAP[RobotName.l30] == "linker_hand_l30"
 
     def test_robot_len_map(self):
         assert ROBOT_LEN_MAP[RobotName.o7] == 7
@@ -92,6 +94,7 @@ class TestRobotNameMap:
         assert ROBOT_LEN_MAP[RobotName.l25] == 20
         assert ROBOT_LEN_MAP[RobotName.o20] == 20
         assert ROBOT_LEN_MAP[RobotName.o30] == 20
+        assert ROBOT_LEN_MAP[RobotName.l30] == 18
 
     @pytest.mark.parametrize("robot_name", ["o20", "o30"])
     def test_independent_20_dof_model_runtime_assets(self, robot_name):
@@ -114,6 +117,42 @@ class TestRobotNameMap:
             assert hand_config[f"commandupper_{side}_{robot_name}"]
             assert hand_config[f"commandsourcedataindex_{side}_{robot_name}"]
             assert hand_config[f"urdfdataindex_{side}_{robot_name}"]
+
+    def test_l30_hand_config_uses_declared_motor_order_with_unused_tail_slot(self):
+        package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
+        hand_config_path = package_dir / "config" / "hand_config.yml"
+        hand_config = yaml.safe_load(hand_config_path.read_text())
+        expected_lower = [0, 0, 0, 0, -200, 0, 0, 0, 0, 0, 0, -200, -200, -200, 0, 0, -1000, None]
+        expected_upper = [1000, 1500, 1000, 900, 200, 1500, 1600, 1600, 1500, 1600, 1500, 200, 200, 200, 1600, 1500, 1000, None]
+        expected_commandsource = [0, 19, 1, 18, 5, 14, 4, 12, 10, 17, 6, 16, 13, 9, 8, 2, None, None]
+        expected_urdf_indices = [19, 20, 17, 18, 5, 7, 6, 10, 11, 2, 3, 1, 9, 13, 14, 15, 0, None]
+
+        for side in ("right", "left"):
+            urdf_path = (
+                package_dir
+                / "assets"
+                / "robots"
+                / "hands"
+                / "linker_hand"
+                / f"l30_{side}"
+                / f"linkerhand_l30_{side}.urdf"
+            )
+            movable_joints = [
+                joint.attrib["name"]
+                for joint in ET.parse(urdf_path).getroot().findall("joint")
+                if joint.attrib.get("type") != "fixed"
+            ]
+
+            assert len(movable_joints) == 21
+            assert movable_joints[0] == "wrist_pitch"
+            assert _optional_list(hand_config[f"commandlower_{side}_l30"]) == expected_lower
+            assert _optional_list(hand_config[f"commandupper_{side}_l30"]) == expected_upper
+            assert _optional_list(hand_config[f"commandsourcedataindex_{side}_l30"]) == expected_commandsource
+            urdf_indices = _optional_list(hand_config[f"urdfdataindex_{side}_l30"])
+            assert len(urdf_indices) == 18
+            assert urdf_indices[16] == 0
+            assert urdf_indices[17] is None
+            assert urdf_indices == expected_urdf_indices
 
     def test_o30_hand_config_uses_20_dof_urdf_and_canonical_source_template(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"

@@ -37,6 +37,7 @@ class RobotName(enum.Enum):
     o30 = enum.auto()
     l25 = enum.auto()
     g20 = enum.auto()
+    l30 = enum.auto()
 
 
 class RetargetingType(enum.Enum):
@@ -85,6 +86,7 @@ ROBOT_NAME_MAP = {
     RobotName.o30: "linker_hand_o30",
     RobotName.l25: "linker_hand_l25",
     RobotName.g20: "linker_hand_g20",
+    RobotName.l30: "linker_hand_l30",
 }
 
 ROBOT_NAMES = list(ROBOT_NAME_MAP.keys())
@@ -106,6 +108,7 @@ ROBOT_LEN_MAP ={
     RobotName.o30: 20,
     RobotName.l25: 20,
     RobotName.g20: 20,
+    RobotName.l30: 18,
 }
 
 ROBOT_LEN = list(ROBOT_LEN_MAP.keys())
