@@ -197,4 +197,5 @@ class Retarget():
         """主处理函数"""
         if not self.initialize_udp():
             self.node.get_logger().error("初始化配置网络失败")
-            return
+            return False
+        return True

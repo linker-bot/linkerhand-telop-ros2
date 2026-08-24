@@ -557,7 +557,6 @@ class Retarget():
                 f"raw_previous={previous_raw}, "
                 f"raw_current={current_raw}"
             )
-            self.node.get_logger().warn(message)
             append_linkerforce_abnormal_log(message)
 
     def _trace_o6_right_publish_frame_rate(self, raw_jump_trace):

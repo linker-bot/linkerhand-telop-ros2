@@ -3,6 +3,14 @@ from linkerhand_retarget.linkerhand.udexrealcore import (
     UdexRealData, MotionData, Bone, Parameter, DeviceData,
     NODES_HAND, NO_DATA_TIMEOUT
 )
+from linkerhand_retarget.motion.udexreal.retarget import Retarget
+
+
+def test_udexreal_retarget_process_returns_true_after_udp_initialization(monkeypatch):
+    retarget = Retarget.__new__(Retarget)
+    monkeypatch.setattr(retarget, "initialize_udp", lambda: True)
+
+    assert retarget.process() is True
 
 
 class TestUdexRealData:
