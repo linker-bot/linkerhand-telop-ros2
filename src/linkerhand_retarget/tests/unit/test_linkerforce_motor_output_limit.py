@@ -62,7 +62,6 @@ MODEL_CONFIG_MODULES = (
     "l6_config",
     "o20_config",
     "o30_config",
-    "o30i_config",
     "o6_config",
     "o7_config",
 )

@@ -1,6 +1,6 @@
 # LinkerFFG Robot Hand Driver Module
 
-LinkerFFG (O6/L7/L10/G20/O20/O30/O30i/R20/L25) robot hand ROS2 driver module, controls robot hands via serial port with real-time data glove mapping.
+LinkerFFG (O6/L7/L10/G20/O20/O30/R20/L25) robot hand ROS2 driver module, controls robot hands via serial port with real-time data glove mapping.
 
 ---
 
@@ -33,7 +33,7 @@ Edit `config/base_config.yml` to set robot hand model:
 ```yaml
 system:
   motion_type: linkerforce    # Data glove type: linkerforce (required)
-  robotname_r: l25            # Right hand model: o6 / l7 / l10 / g20 / o20 / o30 / o30i / r20 / l25
+  robotname_r: l25            # Right hand model: o6 / l7 / l10 / g20 / o20 / o30 / r20 / l25
   robotname_l: l25            # Left hand model
 
 serial:
@@ -86,8 +86,7 @@ Hold each gesture stable for about 5 seconds. The terminal progress bar advances
 | L10 | 10 | 10-DOF industrial model |
 | G20 | 20 | 20-DOF industrial model |
 | O20 | 20 | Independent 20-DOF O-series model |
-| O30 | 20 | Independent O30 model initialized from the G20 template |
-| O30i | 20 | Independent O30i model with 20 movable URDF joints, mapped from the G20 template |
+| O30 | 20 | Independent O-series model with 20 movable URDF joints |
 | R20 | 20 | 20-DOF research model |
 | L25 | 25 | 25-DOF full-featured model |
 
@@ -321,7 +320,7 @@ See the "Configuration" section in the main README for full config reference. Li
 | Config | Description | Options |
 |--------|-------------|---------|
 | `motion_type` | Data glove type | `linkerforce` (required) |
-| `robotname_r` | Right hand robot model | `o6`, `l7`, `l10`, `g20`, `o20`, `o30`, `o30i`, `r20`, `l25` |
+| `robotname_r` | Right hand robot model | `o6`, `l7`, `l10`, `g20`, `o20`, `o30`, `r20`, `l25` |
 | `robotname_l` | Left hand robot model | same as above |
 | `retargeting_type` | Retargeting type | `projection` |
 
@@ -450,7 +449,6 @@ motion/linkerforce/
 │   ├── g20_config.py    # G20 config
 │   ├── o20_config.py    # O20 config
 │   ├── o30_config.py    # O30 config
-│   ├── o30i_config.py   # O30i config
 │   └── o7_config.py     # O7 config
 ├── hand/                # Robot hand drivers
 │   ├── linkerforce_o6.py
@@ -460,8 +458,7 @@ motion/linkerforce/
 │   ├── linkerforce_l20.py
 │   ├── linkerforce_g20.py
 │   ├── linkerforce_o20.py
-│   ├── linkerforce_o30.py
-│   └── linkerforce_o30i.py
+│   └── linkerforce_o30.py
 ├── tmp/                 # Temp files (calibration data, etc.)
 ├── retarget.py          # ROS integration
 └── README.md           # English documentation

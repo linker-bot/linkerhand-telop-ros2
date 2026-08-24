@@ -20,15 +20,15 @@
 
 ### 数据手套与机械手型号
 
-| 数据手套 | O6 | L6 | L7 | L10/L10v7 | L20 | L21/L25 | G20 | O20 | O30 | O30i | 模块 | 文档 |
-|----------|----|----|----|-----------|-----|---------|-----|-----|-----|------|------|------|
-| LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README_zh.md) |
-| VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | - | `motion/vtrdyn` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README_zh.md) |
-| LinkerTG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | - | `motion/udexreal` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README_zh.md) |
-| LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | - | `motion/linkermcg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README_zh.md) |
-| LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | - | `motion/linkereg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README_zh.md) |
+| 数据手套 | O6 | L6 | L7 | L10/L10v7 | L20 | L21/L25 | G20 | O20 | O30 | 模块 | 文档 |
+|----------|----|----|----|-----------|-----|---------|-----|-----|-----|------|------|
+| LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README_zh.md) |
+| VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/vtrdyn` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README_zh.md) |
+| LinkerTG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/udexreal` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README_zh.md) |
+| LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkermcg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README_zh.md) |
+| LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkereg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README_zh.md) |
 
-O20、O30、O30i 目前仅支持 LinkerFFG（`linkerforce`）数据手套链路，其他数据手套模块在当前版本暂不支持这三个型号。
+O20、O30 目前仅支持 LinkerFFG（`linkerforce`）数据手套链路，其他数据手套模块在当前版本暂不支持这两个型号。
 
 ## ROS2 兼容性
 
@@ -114,7 +114,7 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `motion_type` | 数据手套类型 | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkereg1`, `linkereg2` |
 | `datasource_type` | 数据源类型 | `motion` |
 | `retargeting_type` | 重定向类型 | `projection` |
-| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`, `o30i`（`o20`/`o30`/`o30i` 仅适用于 `motion_type: linkerforce`） |
+| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`（`o20`/`o30` 仅适用于 `motion_type: linkerforce`） |
 | `robotname_l` | 左手机械手型号 | 同上 |
 | `motion_device` | 运动设备标识，由所选 motion source 使用 | 例如 `eric` |
 

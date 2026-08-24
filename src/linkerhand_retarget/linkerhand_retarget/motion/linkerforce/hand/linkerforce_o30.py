@@ -5,11 +5,202 @@ v2.8.0升级了映射器算法
 """
 import numpy as np
 import copy
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from linkerhand.handcore import HandCore
 from linkerhand.calibration_checklist import normalize_calibration_filter_config
-from ..config.o30_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
-from typing import List
-from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
+from ..config.o30_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
+from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
+
+O30_MUJOCO_JOINT_ARC_INDICES = (
+    0, 1, 2, 3,
+    4, 5, 6, 6,
+    8, 9, 10, 10,
+    12, 13, 14, 14,
+    16, 17, 18, 18,
+)
+O30_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
+
+O30_TOPIC_JOINT_NAMES = (
+    "拇指横滚",
+    "拇指侧摆",
+    "食指侧摆",
+    "中指侧摆",
+    "无名指侧摆",
+    "小指侧摆",
+    "拇指指根",
+    "食指指根",
+    "中指指根",
+    "无名指指根",
+    "小指指根",
+    "食指指中",
+    "中指指中",
+    "无名指指中",
+    "小指指中",
+    "拇指指尖",
+    "食指指尖",
+    "中指指尖",
+    "无名指指尖",
+    "小指指尖",
+)
+
+O30_MOTOR_QPOS_INDICES = (
+    16, 17, 0, 8, 12, 4,
+    18, 1, 9, 13, 5,
+    2, 10, 14, 6,
+    19, 2, 10, 14, 6,
+)
+
+O30_MOTOR_ROBOT_INDICES = (
+    0, 1, 4, 8, 12, 16,
+    2, 5, 9, 13, 17,
+    6, 10, 14, 18,
+    3, 7, 11, 15, 19,
+)
+O30_MOTOR_ARC_INDICES = O30_MOTOR_ROBOT_INDICES
+O30_REVERSED_MOTOR_ROBOT_INDICES = {4, 8, 12, 16}
+
+
+def _clamp(value, lower, upper):
+    return min(upper, max(lower, value))
+
+
+def _scale_value(value, source_min, source_max, target_min, target_max):
+    if abs(source_max - source_min) < 1e-9:
+        return float(target_max)
+    ratio = (value - source_min) / (source_max - source_min)
+    ratio = max(0.0, min(1.0, ratio))
+    return float(target_min + ratio * (target_max - target_min))
+
+
+def _load_urdf_joint_limits(hand: str):
+    package_dir = Path(__file__).resolve().parents[3]
+    urdf_path = (
+        package_dir
+        / "assets"
+        / "robots"
+        / "hands"
+        / "linker_hand"
+        / f"o30_{hand}"
+        / f"linkerhand_o30_{hand}.urdf"
+    )
+    root = ET.parse(urdf_path).getroot()
+    limits = []
+    for joint in root.findall("joint"):
+        if joint.attrib.get("type") == "fixed":
+            continue
+        limit = joint.find("limit")
+        if limit is None:
+            limits.append((float("-inf"), float("inf")))
+            continue
+        limits.append((float(limit.attrib["lower"]), float(limit.attrib["upper"])))
+    return tuple(limits)
+
+
+O30_URDF_JOINT_LIMITS_RIGHT = _load_urdf_joint_limits("right")
+O30_URDF_JOINT_LIMITS_LEFT = _load_urdf_joint_limits("left")
+
+
+def _map_o30_qpos_to_motor(qpos, hand: str):
+    joint_limits = O30_URDF_JOINT_LIMITS_LEFT if hand == "left" else O30_URDF_JOINT_LIMITS_RIGHT
+    jointpositions = [255.0] * len(O30_MOTOR_QPOS_INDICES)
+    for index, (source_idx, robot_idx) in enumerate(zip(O30_MOTOR_QPOS_INDICES, O30_MOTOR_ROBOT_INDICES)):
+        if source_idx is None or robot_idx is None:
+            continue
+        if source_idx >= len(qpos) or robot_idx >= len(joint_limits):
+            continue
+        lower, upper = joint_limits[robot_idx]
+        value = _clamp(qpos[source_idx], lower, upper)
+        target_min, target_max = (255, 0) if robot_idx in O30_REVERSED_MOTOR_ROBOT_INDICES else (0, 255)
+        jointpositions[index] = int(round(_scale_value(value, lower, upper, target_min, target_max)))
+    return jointpositions
+
+
+def _map_o30_arc_to_motor(arc_values, hand: str):
+    joint_limits = O30_URDF_JOINT_LIMITS_LEFT if hand == "left" else O30_URDF_JOINT_LIMITS_RIGHT
+    jointpositions = [255.0] * len(O30_MOTOR_ARC_INDICES)
+    for index, arc_idx in enumerate(O30_MOTOR_ARC_INDICES):
+        if arc_idx is None:
+            continue
+        if arc_idx >= len(arc_values) or arc_idx >= len(joint_limits):
+            continue
+        lower, upper = joint_limits[arc_idx]
+        value = _clamp(arc_values[arc_idx], lower, upper)
+        target_min, target_max = (255, 0) if arc_idx in O30_REVERSED_MOTOR_ROBOT_INDICES else (0, 255)
+        jointpositions[index] = int(round(_scale_value(value, lower, upper, target_min, target_max)))
+    return jointpositions
+
+def _build_o30_right_mujoco_joint_arc_remaps(robot_original, robot_opose, robot_fist):
+    _ = (robot_original, robot_opose, robot_fist)
+    return (None,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
+
+
+def _apply_o30_arc_values(qpos, arc_storage, arc_value):
+    qpos[16] = arc_storage[0] = arc_value[0]
+    qpos[17] = arc_storage[1] = arc_value[1]
+    qpos[18] = arc_storage[2] = arc_value[2]
+    qpos[19] = arc_storage[3] = arc_value[3]
+
+    qpos[0] = arc_storage[4] = arc_value[4]
+    qpos[1] = arc_storage[5] = arc_value[5]
+    qpos[2] = arc_storage[6] = arc_value[6]
+    arc_storage[7] = arc_value[6]
+
+    qpos[8] = arc_storage[8] = arc_value[8]
+    qpos[9] = arc_storage[9] = arc_value[9]
+    qpos[10] = arc_storage[10] = arc_value[10]
+    arc_storage[11] = arc_value[10]
+
+    qpos[12] = arc_storage[12] = arc_value[12]
+    qpos[13] = arc_storage[13] = arc_value[13]
+    qpos[14] = arc_storage[14] = arc_value[14]
+    arc_storage[15] = arc_value[14]
+
+    qpos[4] = arc_storage[16] = arc_value[16]
+    qpos[5] = arc_storage[17] = arc_value[17]
+    qpos[6] = arc_storage[18] = arc_value[18]
+    arc_storage[19] = arc_value[18]
+
+
+def _map_piecewise_linear(value, source_open, source_opose, source_fist,
+                          target_open, target_opose, target_fist):
+    def interpolate(x0, y0, x1, y1):
+        if abs(x1 - x0) < 1e-9:
+            return y1
+        ratio = (value - x0) / (x1 - x0)
+        ratio = max(0.0, min(1.0, ratio))
+        return y0 + ratio * (y1 - y0)
+
+    open_to_opose = (value - source_open) * (value - source_opose) <= 0
+    opose_to_fist = (value - source_opose) * (value - source_fist) <= 0
+
+    if open_to_opose:
+        return interpolate(source_open, target_open, source_opose, target_opose)
+    if opose_to_fist:
+        return interpolate(source_opose, target_opose, source_fist, target_fist)
+
+    anchors = (
+        (source_open, target_open),
+        (source_opose, target_opose),
+        (source_fist, target_fist),
+    )
+    return min(anchors, key=lambda anchor: abs(value - anchor[0]))[1]
+
+
+def _interpolate_clamped(value, source_start, source_end, target_start, target_end):
+    if abs(source_end - source_start) < 1e-9:
+        return float(target_end)
+
+    ratio = (value - source_start) / (source_end - source_start)
+    ratio = max(0.0, min(1.0, ratio))
+    return float(target_start + ratio * (target_end - target_start))
+
+
+def _matches_calibration_pose(joint_arc, calibration_pose) -> bool:
+    if calibration_pose is None or len(joint_arc) != len(calibration_pose):
+        return False
+    return bool(np.allclose(joint_arc, calibration_pose, rtol=0.0, atol=1e-9))
+
 
 def _resolve_version_config(configs: dict, version: str) -> dict:
     """
@@ -23,14 +214,69 @@ def _resolve_version_config(configs: dict, version: str) -> dict:
             config['reverse_motion'] = config['reverse_motion'].get(version, config['reverse_motion'].get('v2', False))
     return resolved
 
+
+class O30StableDynamicWeightMultiStateLinearMapper(DynamicWeightMultiStateLinearMapper):
+    def __init__(
+        self,
+        finger_configs,
+        mapping_order,
+        is_debug: bool = False,
+        thumb_output_alpha: float = 0.35,
+        thumb_output_max_step: float = 0.12,
+        thumb_output_deadband: float = 0.02,
+    ):
+        super().__init__(finger_configs, mapping_order, is_debug=is_debug)
+        self.thumb_output_alpha = thumb_output_alpha
+        self.thumb_output_max_step = thumb_output_max_step
+        self.thumb_output_deadband = thumb_output_deadband
+        self._thumb_output_state = None
+
+    def reset_thumb_filter(self, current=None):
+        self._thumb_output_state = None if current is None else np.array(current, dtype=float)
+
+    def map_glove_to_robot(self, source_current):
+        source_current_array = np.array(source_current, dtype=float)
+        for state_name, glove_state in self.glove_states.items():
+            if np.allclose(source_current_array, glove_state, rtol=0.0, atol=1e-9):
+                robot_angles = self.robot_states[state_name].copy()
+                self.reset_thumb_filter(robot_angles)
+                return robot_angles
+
+        robot_angles = np.array(super().map_glove_to_robot(source_current), dtype=float)
+        if self._thumb_output_state is None or len(self._thumb_output_state) != len(robot_angles):
+            self._thumb_output_state = robot_angles.copy()
+            return robot_angles
+
+        for robot_idx in (0, 1):
+            target = float(robot_angles[robot_idx])
+            previous = float(self._thumb_output_state[robot_idx])
+            delta = target - previous
+            if abs(delta) <= self.thumb_output_deadband:
+                filtered = previous
+            else:
+                step = np.clip(
+                    delta * self.thumb_output_alpha,
+                    -self.thumb_output_max_step,
+                    self.thumb_output_max_step,
+                )
+                filtered = previous + float(step)
+            robot_angles[robot_idx] = filtered
+            self._thumb_output_state[robot_idx] = filtered
+
+        return robot_angles
+
 class RightHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
+        self.hand_side = "right"
         self.g_jointpositions = [255] * length
+        self.topic_joint_names = O30_TOPIC_JOINT_NAMES
         self.g_jointvelocity = [255] * length
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
+        self.mujoco_joint_arc_indices = O30_MUJOCO_JOINT_ARC_INDICES
+        self.mujoco_joint_arc_signs = O30_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None    # 五指张开标定值 (对应255)
@@ -53,9 +299,19 @@ class RightHand:
         self.robot_original = ROBOT_ORIGINAL_RIGHT
         self.robot_opose = ROBOT_OPOSE_RIGHT
         self.robot_fist = ROBOT_FIST_RIGHT
+        self.mujoco_joint_arc_remaps = _build_o30_right_mujoco_joint_arc_remaps(
+            self.robot_original,
+            self.robot_opose,
+            self.robot_fist,
+        )
+        self.mujoco_joint_arc_mirrors = (None,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
 
         finger_configs = _resolve_version_config(FINGER_CONFIGS, self.glove_version)
-        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
+        self.multi_state_mapper = O30StableDynamicWeightMultiStateLinearMapper(
+            finger_configs,
+            MAPPING_ORDER,
+            is_debug=is_debug,
+        )
 
         for config_name, config in FINGER_CONFIGS.items():
             if config.get('dynamic_weight'):
@@ -69,6 +325,14 @@ class RightHand:
                 min_val = constraint.get('min', 0)
                 max_val = constraint.get('max', 255)
                 self.g_jointpositions[i] = int(max(min_val, min(max_val, self.g_jointpositions[i])))
+
+    def _set_g_jointpositions_from_qpos(self, qpos):
+        self.g_jointpositions = _map_o30_qpos_to_motor(qpos, self.hand_side)
+        return self.g_jointpositions
+
+    def _set_g_jointpositions_from_arc(self):
+        self.g_jointpositions = _map_o30_arc_to_motor(self.g_jointpositions_arc, self.hand_side)
+        return self.g_jointpositions
 
     def set_glove_version(self, version: str):
         if not version:
@@ -110,8 +374,6 @@ class RightHand:
         self.multi_state_mapper.add_state('fist', glove_fist, self.robot_fist)
 
         self.multi_state_mapper.set_state_order(list(MULTI_SEGMENT_CONFIG_FROZEN))
-
-        state_info = self.multi_state_mapper.get_state_info()
 
     def _to_list(self, data):
         """转换为列表"""
@@ -189,30 +451,7 @@ class RightHand:
             arc_value = None
 
         if arc_value is not None:
-            qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
-            qpos[17] = self.g_jointpositions_arc[1] = arc_value[1]
-            qpos[18] = self.g_jointpositions_arc[2] = arc_value[2]
-            qpos[19] = self.g_jointpositions_arc[3] = arc_value[3]
-
-            qpos[0] = self.g_jointpositions_arc[5] = arc_value[5]
-            qpos[1] = self.g_jointpositions_arc[6] = arc_value[6]
-            qpos[2] = self.g_jointpositions_arc[7] = arc_value[7]
-            qpos[3] = self.g_jointpositions_arc[8] = arc_value[8]
-
-            qpos[4] = self.g_jointpositions_arc[17] = arc_value[17]
-            qpos[5] = self.g_jointpositions_arc[18] = arc_value[18]
-            qpos[6] = self.g_jointpositions_arc[19] = arc_value[19]
-            qpos[7] = self.g_jointpositions_arc[4] = arc_value[20]
-
-            qpos[8] = self.g_jointpositions_arc[9] = arc_value[9]
-            qpos[9] = self.g_jointpositions_arc[10] = arc_value[10]
-            qpos[10] = self.g_jointpositions_arc[11] = arc_value[11]
-            qpos[11] = self.g_jointpositions_arc[12] = arc_value[12]
-
-            qpos[12] = self.g_jointpositions_arc[13] = arc_value[13]
-            qpos[13] = self.g_jointpositions_arc[14] = arc_value[14]
-            qpos[14] = self.g_jointpositions_arc[15] = arc_value[15]
-            qpos[15] = self.g_jointpositions_arc[16] = arc_value[16]
+            _apply_o30_arc_values(qpos, self.g_jointpositions_arc, arc_value)
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2
@@ -223,7 +462,10 @@ class RightHand:
             qpos[5] = joint_arc[18] * 0.1 + joint_arc[20] * 0.7
 
         # ========== 应用平滑滤波 ==========
-        self.g_jointpositions = self.handcore.trans_to_motor_right(qpos)
+        if arc_value is not None:
+            self._set_g_jointpositions_from_arc()
+        else:
+            self._set_g_jointpositions_from_qpos(qpos)
         self._apply_motor_constraints()
         self.g_jointpositions = self._apply_smooth(self.g_jointpositions)
 
@@ -275,14 +517,19 @@ class RightHand:
             self.last_jointvelocity[i] = self.g_jointvelocity[i]
             self.last_jointpositions[i] = self.g_jointpositions[i]
 
+
 class LeftHand:
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
+        self.hand_side = "left"
         self.g_jointpositions = [255] * length
+        self.topic_joint_names = O30_TOPIC_JOINT_NAMES
         self.g_jointvelocity = [255] * length
         self.last_jointpositions = [255] * length
         self.last_jointvelocity = [255] * length
         self.g_jointpositions_arc = [0] * length
+        self.mujoco_joint_arc_indices = O30_MUJOCO_JOINT_ARC_INDICES
+        self.mujoco_joint_arc_signs = O30_MUJOCO_JOINT_ARC_SIGNS
         self.g_jointvelocity_arc = [0] * length
         self.handstate = [0] * length
         self.calibrationoriginal = None
@@ -299,9 +546,15 @@ class LeftHand:
         self.robot_original = ROBOT_ORIGINAL_LEFT
         self.robot_opose = ROBOT_OPOSE_LEFT
         self.robot_fist = ROBOT_FIST_LEFT
+        self.mujoco_joint_arc_remaps = (None,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
+        self.mujoco_joint_arc_mirrors = (None,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
 
         finger_configs = _resolve_version_config(FINGER_CONFIGS, self.glove_version)
-        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
+        self.multi_state_mapper = O30StableDynamicWeightMultiStateLinearMapper(
+            finger_configs,
+            MAPPING_ORDER,
+            is_debug=is_debug,
+        )
 
         for config_name, config in FINGER_CONFIGS.items():
             if config.get('dynamic_weight'):
@@ -315,6 +568,14 @@ class LeftHand:
                 min_val = constraint.get('min', 0)
                 max_val = constraint.get('max', 255)
                 self.g_jointpositions[i] = int(max(min_val, min(max_val, self.g_jointpositions[i])))
+
+    def _set_g_jointpositions_from_qpos(self, qpos):
+        self.g_jointpositions = _map_o30_qpos_to_motor(qpos, self.hand_side)
+        return self.g_jointpositions
+
+    def _set_g_jointpositions_from_arc(self):
+        self.g_jointpositions = _map_o30_arc_to_motor(self.g_jointpositions_arc, self.hand_side)
+        return self.g_jointpositions
 
     def set_glove_version(self, version: str):
         if not version:
@@ -429,36 +690,20 @@ class LeftHand:
         qpos = np.zeros(25)
         # ========== 使用映射器进行精确映射 ==========
         if self.calibrationoriginal is not None and self.calibrationfistpose is not None and self.calibrationopose is not None:
+            is_exact_calibration_pose = (
+                _matches_calibration_pose(joint_arc, self.calibrationoriginal)
+                or _matches_calibration_pose(joint_arc, self.calibrationopose)
+                or _matches_calibration_pose(joint_arc, self.calibrationfistpose)
+            )
+            if is_exact_calibration_pose and hasattr(self.multi_state_mapper, "reset_thumb_output"):
+                self.multi_state_mapper.reset_thumb_output()
             arc_value = self.multi_state_mapper.map_glove_to_robot(joint_arc)
         # ========== 没有标定数据时使用手动映射 ==========
         else:
             arc_value = None
 
         if arc_value is not None:
-            qpos[16] = self.g_jointpositions_arc[0] = arc_value[0]
-            qpos[17] = self.g_jointpositions_arc[1] = arc_value[1]
-            qpos[18] = self.g_jointpositions_arc[2] = arc_value[2]
-            qpos[19] = self.g_jointpositions_arc[3] = arc_value[3]
-
-            qpos[0] = self.g_jointpositions_arc[5] = arc_value[5]
-            qpos[1] = self.g_jointpositions_arc[6] = arc_value[6]
-            qpos[2] = self.g_jointpositions_arc[7] = arc_value[7]
-            qpos[3] = self.g_jointpositions_arc[8] = arc_value[8]
-
-            qpos[4] = self.g_jointpositions_arc[17] = arc_value[17]
-            qpos[5] = self.g_jointpositions_arc[18] = arc_value[18]
-            qpos[6] = self.g_jointpositions_arc[19] = arc_value[19]
-            qpos[7] = self.g_jointpositions_arc[4] = arc_value[20]
-
-            qpos[8] = self.g_jointpositions_arc[9] = arc_value[9]
-            qpos[9] = self.g_jointpositions_arc[10] = arc_value[10]
-            qpos[10] = self.g_jointpositions_arc[11] = arc_value[11]
-            qpos[11] = self.g_jointpositions_arc[12] = arc_value[12]
-
-            qpos[12] = self.g_jointpositions_arc[13] = arc_value[13]
-            qpos[13] = self.g_jointpositions_arc[14] = arc_value[14]
-            qpos[14] = self.g_jointpositions_arc[15] = arc_value[15]
-            qpos[15] = self.g_jointpositions_arc[16] = arc_value[16]
+            _apply_o30_arc_values(qpos, self.g_jointpositions_arc, arc_value)
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2
@@ -468,7 +713,10 @@ class LeftHand:
             qpos[13] = joint_arc[14] * 0.1 + joint_arc[16] * 0.7
             qpos[5] = joint_arc[18] * 0.1 + joint_arc[20] * 0.7
 
-        self.g_jointpositions = self.handcore.trans_to_motor_left(qpos)
+        if arc_value is not None:
+            self._set_g_jointpositions_from_arc()
+        else:
+            self._set_g_jointpositions_from_qpos(qpos)
 
         # print(qpos[4],arc_value[17],self.g_jointpositions[9])
         self._apply_motor_constraints()

@@ -16,23 +16,23 @@
 - 测试命令：
 
 ```bash
-PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /usr/bin/python3 -m pytest src/linkerhand_retarget/tests/unit/test_linkerforce.py src/linkerhand_retarget/tests/unit/test_linkerforce_o30i.py -q
+PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /usr/bin/python3 -m pytest src/linkerhand_retarget/tests/unit/test_linkerforce.py src/linkerhand_retarget/tests/unit/test_linkerforce_o30.py -q
 ```
 
 ## 3. 自动化测试结果
 
-本次针对 LinkerForce 串口解析和 O30i 映射相关单测执行后，结果如下：
+本次针对 LinkerForce 串口解析和 O30 映射相关单测执行后，结果如下：
 
 ```text
 54 passed, 2 failed in 0.43s
 ```
 
-失败用例集中在 O30i 右手拇指实时 open-to-fist 方向映射：
+失败用例集中在 O30 右手拇指实时 open-to-fist 方向映射：
 
-- `test_o30i_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction`
-- `test_o30i_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction`
+- `test_o30_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction`
+- `test_o30_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction`
 
-当前失败现象为实时输入接近 fist 时，`thumb_cmc_roll` 和 `thumb_cmc_yaw` 输出弧度未达到测试期望阈值。该问题属于 O30i 实时映射标定/期望值仍需继续核对的遗留项，本次版本记录不将其标记为通过。
+当前失败现象为实时输入接近 fist 时，`thumb_cmc_roll` 和 `thumb_cmc_yaw` 输出弧度未达到测试期望阈值。该问题属于 O30 实时映射标定/期望值仍需继续核对的遗留项，本次版本记录不将其标记为通过。
 
 ## 4. 本次更新覆盖范围
 
@@ -51,8 +51,8 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 5. O6 映射状态
    已按参考项目同步 O6 配置，默认多段映射状态调整为 `original -> fist`，保留 `opose` 状态配置。
 
-6. O30i 输出方向与归一化
-   更新 O30i 拇指旋转和四指 roll 的电机归一化测试，当前仍需继续核对右手拇指实时 open-to-fist 的期望边界。
+6. O30 输出方向与归一化
+   更新 O30 拇指旋转和四指 roll 的电机归一化测试，当前仍需继续核对右手拇指实时 open-to-fist 的期望边界。
 
 7. MuJoCo 显示稳定性
    双手显示时改为隔离子进程启动以避免 native viewer 崩溃；`base_config.yml` 默认将 `mujoco.enabled` 关闭，仍可按配置开启。
@@ -70,17 +70,17 @@ PYTHONPATH=src/linkerhand_retarget:src/linkerhand_retarget/linkerhand_retarget /
 | LinkerForce | 异常帧与 `255<->0` 端点跳变日志 | 通过 |
 | LinkerForce | 串口运行线程写入走统一写锁 | 通过 |
 | O6 | 默认映射状态切换为 `original -> fist` | 通过 |
-| O30i | URDF 弧度到 `0..255` 电机归一化 | 部分通过 |
+| O30 | URDF 弧度到 `0..255` 电机归一化 | 部分通过 |
 | MuJoCo | 双手显示隔离子进程与默认关闭开关 | 通过 |
-| O30i | 右手拇指实时 open-to-fist roll/yaw 边界 | 未通过 |
+| O30 | 右手拇指实时 open-to-fist roll/yaw 边界 | 未通过 |
 
 ## 6. 现场复测项
 
 1. 使用真实 LinkerForce 手套复测异常日志，重点观察 `Unknown command` 的完整帧 hex，以及 `255->0`、`0->255` 端点跳变的 `prev/current/raw_previous/raw_current`。
 2. 使用真实 O6 左右手复测默认配置和标定启动脚本，确认 `/dev/ttyUSB0`、`/dev/ttyUSB1` 与现场接线一致。
-3. 使用真实 O30i 右手复测拇指 `thumb_cmc_roll`、`thumb_cmc_yaw` 的 open、opose、fist 三个姿态边界。
-4. 若 O30i 右手拇指实机方向正确但单测仍失败，需要重新确认测试里的标定输入和期望阈值。
+3. 使用真实 O30 右手复测拇指 `thumb_cmc_roll`、`thumb_cmc_yaw` 的 open、opose、fist 三个姿态边界。
+4. 若 O30 右手拇指实机方向正确但单测仍失败，需要重新确认测试里的标定输入和期望阈值。
 
 ## 7. 自测结论
 
-v2.12.7 已完成版本号、更新说明和自测报告记录。软件侧单测显示 LinkerForce 串口解析、异常日志和串口写入链路相关用例通过；O30i 右手拇指实时 open-to-fist 边界仍有 2 个失败用例，需要后续结合最新标定文件和实机表现继续处理。
+v2.12.7 已完成版本号、更新说明和自测报告记录。软件侧单测显示 LinkerForce 串口解析、异常日志和串口写入链路相关用例通过；O30 右手拇指实时 open-to-fist 边界仍有 2 个失败用例，需要后续结合最新标定文件和实机表现继续处理。

@@ -389,7 +389,7 @@ def test_save_to_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch, 
     retarget.lefthand = make_hand()
     retarget.righthand = make_hand()
     retarget.lefthandtype = RobotName.o20
-    retarget.righthandtype = RobotName.o30i
+    retarget.righthandtype = RobotName.o30
     retarget.lefthand.calibrationoriginal = [1.0, 2.0]
     retarget.lefthand.calibrationopose = [3.0, 4.0]
     retarget.lefthand.calibrationfistpose = [5.0, 6.0]
@@ -403,7 +403,7 @@ def test_save_to_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch, 
     assert retarget._save_to_tmp() is True
 
     data = json.loads(tmp_file.read_text())
-    assert data["robotname_r"] == "o30i"
+    assert data["robotname_r"] == "o30"
     assert data["robotname_l"] == "o20"
 
 
@@ -420,8 +420,8 @@ def test_load_from_tmp_rejects_mismatched_robot_models(monkeypatch, tmp_path):
     retarget.force_reader_right = None
     retarget.lefthand = make_hand()
     retarget.righthand = make_hand()
-    retarget.robot_name_r = RobotName.o30i
-    retarget.robot_name_l = RobotName.o30i
+    retarget.robot_name_r = RobotName.o30
+    retarget.robot_name_l = RobotName.o30
 
     tmp_file = tmp_path / "jointangle_data.tmp"
     monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
@@ -461,7 +461,7 @@ def test_load_from_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch
     retarget.lefthand = make_hand()
     retarget.righthand = make_hand()
     retarget.lefthandtype = RobotName.o20
-    retarget.righthandtype = RobotName.o30i
+    retarget.righthandtype = RobotName.o30
 
     tmp_file = tmp_path / "jointangle_data.tmp"
     monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
@@ -469,7 +469,7 @@ def test_load_from_tmp_uses_hand_types_when_robot_name_attrs_missing(monkeypatch
         json.dumps(
             {
                 "timestamp": "2026-06-24T17:51:31.146022",
-                "robotname_r": "o30i",
+                "robotname_r": "o30",
                 "robotname_l": "o20",
                 "jointangleoriginal_r": [1.0, 2.0, 3.0],
                 "jointangleopose_r": [4.0, 5.0, 6.0],
@@ -509,7 +509,7 @@ def test_save_to_tmp_persists_robot_models(monkeypatch, tmp_path):
     retarget.righthand.calibrationopose = [9.0, 10.0]
     retarget.righthand.calibrationfistpose = [11.0, 12.0]
     retarget.robot_name_l = RobotName.o20
-    retarget.robot_name_r = RobotName.o30i
+    retarget.robot_name_r = RobotName.o30
 
     tmp_file = tmp_path / "jointangle_data.tmp"
     monkeypatch.setattr(retarget_module, "TMP_FILE_PATH", tmp_file)
@@ -517,7 +517,7 @@ def test_save_to_tmp_persists_robot_models(monkeypatch, tmp_path):
     assert retarget._save_to_tmp() is True
 
     data = json.loads(tmp_file.read_text())
-    assert data["robotname_r"] == "o30i"
+    assert data["robotname_r"] == "o30"
     assert data["robotname_l"] == "o20"
 
 

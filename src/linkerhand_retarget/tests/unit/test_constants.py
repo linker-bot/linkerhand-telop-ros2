@@ -21,7 +21,12 @@ def _optional_command(value):
     return None if value == "None" else value
 
 
+def _optional_list(values):
+    return [_optional_command(value) for value in values]
+
+
 O20_ROBOT_IDX_TO_URDF_IDX = [0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19]
+RETIRED_O30_VARIANT_NAME = "o30" + "i"
 
 
 class TestRobotName:
@@ -32,7 +37,7 @@ class TestRobotName:
         assert RobotName.l21.value is not None
         assert RobotName.o20.value is not None
         assert RobotName.o30.value is not None
-        assert RobotName.o30i.value is not None
+        assert RETIRED_O30_VARIANT_NAME not in RobotName.__members__
 
     def test_robot_names_list(self):
         from linkerhand_retarget.linkerhand.constants import ROBOT_NAMES
@@ -78,7 +83,6 @@ class TestRobotNameMap:
         assert ROBOT_NAME_MAP[RobotName.l25] == "linker_hand_l25"
         assert ROBOT_NAME_MAP[RobotName.o20] == "linker_hand_o20"
         assert ROBOT_NAME_MAP[RobotName.o30] == "linker_hand_o30"
-        assert ROBOT_NAME_MAP[RobotName.o30i] == "linker_hand_o30i"
 
     def test_robot_len_map(self):
         assert ROBOT_LEN_MAP[RobotName.o7] == 7
@@ -88,9 +92,8 @@ class TestRobotNameMap:
         assert ROBOT_LEN_MAP[RobotName.l25] == 20
         assert ROBOT_LEN_MAP[RobotName.o20] == 20
         assert ROBOT_LEN_MAP[RobotName.o30] == 20
-        assert ROBOT_LEN_MAP[RobotName.o30i] == 20
 
-    @pytest.mark.parametrize("robot_name", ["o20", "o30", "o30i"])
+    @pytest.mark.parametrize("robot_name", ["o20", "o30"])
     def test_independent_20_dof_model_runtime_assets(self, robot_name):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         hand_config_path = package_dir / "config" / "hand_config.yml"
@@ -112,10 +115,12 @@ class TestRobotNameMap:
             assert hand_config[f"commandsourcedataindex_{side}_{robot_name}"]
             assert hand_config[f"urdfdataindex_{side}_{robot_name}"]
 
-    def test_o30i_hand_config_uses_20_dof_urdf_and_g20_source_template(self):
+    def test_o30_hand_config_uses_20_dof_urdf_and_canonical_source_template(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         hand_config_path = package_dir / "config" / "hand_config.yml"
         hand_config = yaml.safe_load(hand_config_path.read_text())
+        expected_commandsource = [18, 1, 9, 13, 5, 16, 0, 8, 12, 4, 17, None, None, None, None, 19, 2, 10, 14, 6]
+        expected_urdf_indices = [2, 5, 9, 13, 17, 0, 4, 8, 12, 16, 1, None, None, None, None, 3, 6, 10, 14, 18]
 
         for side in ("right", "left"):
             urdf_path = (
@@ -124,8 +129,8 @@ class TestRobotNameMap:
                 / "robots"
                 / "hands"
                 / "linker_hand"
-                / f"o30i_{side}"
-                / f"linkerhand_o30i_{side}.urdf"
+                / f"o30_{side}"
+                / f"linkerhand_o30_{side}.urdf"
             )
             movable_joints = [
                 joint
@@ -134,18 +139,25 @@ class TestRobotNameMap:
             ]
 
             assert len(movable_joints) == 20
-            assert hand_config[f"commandsourcedataindex_{side}_o30i"] == hand_config[f"commandsourcedataindex_{side}_g20"]
-            assert len(hand_config[f"urdfdataindex_{side}_o30i"]) == 20
+            assert f"commandlower_{side}_{RETIRED_O30_VARIANT_NAME}" not in hand_config
+            assert _optional_list(hand_config[f"commandsourcedataindex_{side}_o30"]) == expected_commandsource
+            assert _optional_list(hand_config[f"urdfdataindex_{side}_o30"]) == expected_urdf_indices
+            assert len(hand_config[f"urdfdataindex_{side}_o30"]) == 20
 
-    def test_o30i_motor_commands_urdf_minimum_maps_to_motor_zero(self):
+    def test_o30_motor_commands_urdf_minimum_maps_to_motor_zero(self):
         package_dir = Path(__file__).parents[2] / "linkerhand_retarget"
         hand_config_path = package_dir / "config" / "hand_config.yml"
         hand_config = yaml.safe_load(hand_config_path.read_text())
+        expected_lower = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None, None, 0, 0, 0, 0, 0]
+        expected_upper = [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, None, None, None, None, 255, 255, 255, 255, 255]
 
         for side in ("right", "left"):
-            lower = hand_config[f"commandlower_{side}_o30i"]
-            upper = hand_config[f"commandupper_{side}_o30i"]
+            lower = hand_config[f"commandlower_{side}_o30"]
+            upper = hand_config[f"commandupper_{side}_o30"]
 
+            assert f"commandlower_{side}_{RETIRED_O30_VARIANT_NAME}" not in hand_config
+            assert _optional_list(lower) == expected_lower
+            assert _optional_list(upper) == expected_upper
             for raw_lower_value, raw_upper_value in zip(lower, upper):
                 lower_value = _optional_command(raw_lower_value)
                 upper_value = _optional_command(raw_upper_value)

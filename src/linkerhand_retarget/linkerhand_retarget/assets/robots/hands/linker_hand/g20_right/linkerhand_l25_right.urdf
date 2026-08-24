@@ -89,7 +89,7 @@
     type="revolute">
     <origin
       xyz="0.01916 0.01 0.0436"
-      rpy="0 0 0" />
+      rpy="0.0669047936042155 0 0" />
     <parent
       link="hand_base_link" />
     <child
@@ -147,7 +147,7 @@
     type="revolute">
     <origin
       xyz="0.019845 0 0"
-      rpy="-0.77165 0 0" />
+      rpy="-0.771519235634338 -0.015949629057757 -0.0163964520694657" />
     <parent
       link="thumb_metacarpals_base1" />
     <child
@@ -205,7 +205,7 @@
     type="revolute">
     <origin
       xyz="0.0088264 0.024243 0.0005"
-      rpy="0 -1.0647 -1.9199" />
+      rpy="-4.44089209850063e-16 -1.03160184765982 -1.9199" />
     <parent
       link="thumb_metacarpals_base2" />
     <child

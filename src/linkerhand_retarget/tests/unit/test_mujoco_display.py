@@ -136,11 +136,11 @@ def test_mujoco_display_derives_urdf_path_from_selected_hand(tmp_path):
     assert plan.model_path == urdf_path
 
 
-def test_mujoco_display_derives_o30i_urdf_path_from_selected_hand(tmp_path):
+def test_mujoco_display_derives_o30_urdf_path_from_selected_hand(tmp_path):
     package_dir = tmp_path / "linkerhand_retarget"
-    model_dir = package_dir / "assets" / "robots" / "hands" / "linker_hand" / "o30i_left"
+    model_dir = package_dir / "assets" / "robots" / "hands" / "linker_hand" / "o30_left"
     model_dir.mkdir(parents=True)
-    urdf_path = model_dir / "linkerhand_o30i_left.urdf"
+    urdf_path = model_dir / "linkerhand_o30_left.urdf"
     urdf_path.write_text("<robot/>", encoding="utf-8")
 
     plan = build_mujoco_display_plan(
@@ -151,8 +151,8 @@ def test_mujoco_display_derives_o30i_urdf_path_from_selected_hand(tmp_path):
             }
         },
         package_dir=package_dir,
-        robot_name_r=SimpleNamespace(name="o30i"),
-        robot_name_l=SimpleNamespace(name="o30i"),
+        robot_name_r=SimpleNamespace(name="o30"),
+        robot_name_l=SimpleNamespace(name="o30"),
         module_available=lambda _name: True,
     )
 

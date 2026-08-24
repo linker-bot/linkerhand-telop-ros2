@@ -13,6 +13,13 @@ SCHEMA_DOF_MAP = {
     "linker.stroke20.flat.v1": 20,
 }
 
+DOF_SCHEMA_MAP = {dof: schema_id for schema_id, dof in SCHEMA_DOF_MAP.items()}
+DOF_HAND_TYPE_MAP = {
+    6: "LinkerHand/O6",
+    10: "LinkerHand/L10",
+    20: "LinkerHand/O20",
+}
+
 
 @dataclass(frozen=True)
 class StrokeEnvelope:
@@ -100,8 +107,46 @@ def _coerce_labels(values: Any, expected_len: int) -> List[str]:
     return [str(value) for value in values]
 
 
+def _infer_minimal_stroke_envelope(data: dict) -> Optional[StrokeEnvelope]:
+    if "leftHand" not in data or "rightHand" not in data:
+        return None
+    if any(key in data for key in ("schemaId", "handType", "dof", "timestampMs", "labels")):
+        return None
+
+    left_values = data.get("leftHand")
+    right_values = data.get("rightHand")
+    if (
+        not isinstance(left_values, Sequence)
+        or isinstance(left_values, (str, bytes, bytearray))
+        or not isinstance(right_values, Sequence)
+        or isinstance(right_values, (str, bytes, bytearray))
+    ):
+        return None
+    if len(left_values) != len(right_values):
+        raise ValueError(f"leftHand length must match rightHand length: {len(left_values)} != {len(right_values)}")
+
+    dof = len(left_values)
+    schema_id = DOF_SCHEMA_MAP.get(dof)
+    if schema_id is None:
+        raise ValueError(f"unsupported minimal M7 dof length: {dof}")
+
+    return StrokeEnvelope(
+        schema_id=schema_id,
+        hand_type=DOF_HAND_TYPE_MAP[dof],
+        dof=dof,
+        timestamp_ms=int(time.time() * 1000),
+        labels=[f"joint{index + 1}" for index in range(dof)],
+        left_hand=_coerce_float_list("leftHand", left_values, dof),
+        right_hand=_coerce_float_list("rightHand", right_values, dof),
+    )
+
+
 def parse_stroke_envelope(payload: Any) -> StrokeEnvelope:
     data = _decode_payload(payload)
+    inferred = _infer_minimal_stroke_envelope(data)
+    if inferred is not None:
+        return inferred
+
     schema_id = _require_str(data, "schemaId")
     hand_type = _require_str(data, "handType")
     dof = _require_int(data, "dof")

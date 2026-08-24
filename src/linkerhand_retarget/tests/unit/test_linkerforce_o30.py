@@ -41,10 +41,10 @@ class FakeHandCore:
     hand_numjoints_l = 20
 
     def trans_to_motor_right(self, qpos):
-        raise AssertionError("O30i should not call HandCore.trans_to_motor_right")
+        raise AssertionError("O30 should not call HandCore.trans_to_motor_right")
 
     def trans_to_motor_left(self, qpos):
-        raise AssertionError("O30i should not call HandCore.trans_to_motor_left")
+        raise AssertionError("O30 should not call HandCore.trans_to_motor_left")
 
 
 class FakeNode:
@@ -61,7 +61,7 @@ class FakeNode:
         return SimpleNamespace(info=lambda *args, **kwargs: None)
 
 
-O30I_EXPECTED_TOPIC_NAMES = (
+O30_EXPECTED_TOPIC_NAMES = (
     "拇指横滚",
     "拇指侧摆",
     "食指侧摆",
@@ -85,10 +85,10 @@ O30I_EXPECTED_TOPIC_NAMES = (
 )
 
 
-def test_linkerforce_retarget_routes_o30i_to_independent_hand_classes(monkeypatch):
+def test_linkerforce_retarget_routes_o30_to_independent_hand_classes(monkeypatch):
     _install_ros_stubs(monkeypatch)
 
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import (
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import (
         LeftHand,
         RightHand,
     )
@@ -97,8 +97,8 @@ def test_linkerforce_retarget_routes_o30i_to_independent_hand_classes(monkeypatc
 
     retarget = Retarget(
         FakeNode(),
-        righthand=RobotName.o30i,
-        lefthand=RobotName.o30i,
+        righthand=RobotName.o30,
+        lefthand=RobotName.o30,
         handcore=FakeHandCore(),
         lefthandpubprint=False,
         righthandpubprint=False,
@@ -112,10 +112,10 @@ def test_linkerforce_retarget_routes_o30i_to_independent_hand_classes(monkeypatc
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_control_output_uses_local_urdf_normalization(hand_class_name, monkeypatch):
-    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+def test_o30_control_output_uses_local_urdf_normalization(hand_class_name, monkeypatch):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
 
-    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
     hand.motor_constraints = [{"enabled": False} for _ in range(20)]
     hand.calibrationoriginal, hand.calibrationopose, hand.calibrationfistpose = _state_calibration()
@@ -124,7 +124,7 @@ def test_o30i_control_output_uses_local_urdf_normalization(hand_class_name, monk
 
     hand.joint_update([0.0] * 21)
 
-    assert tuple(getattr(hand, "topic_joint_names", ())) == O30I_EXPECTED_TOPIC_NAMES
+    assert tuple(getattr(hand, "topic_joint_names", ())) == O30_EXPECTED_TOPIC_NAMES
     assert hand.g_jointpositions[0] == 0
     assert hand.g_jointpositions[1] == 0
     assert hand.g_jointpositions[2:6] == [217, 151, 159, 159]
@@ -132,10 +132,10 @@ def test_o30i_control_output_uses_local_urdf_normalization(hand_class_name, monk
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
-    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+def test_o30_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
 
-    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
 
     hand.g_jointpositions_arc = [
@@ -155,10 +155,10 @@ def test_o30i_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_thumb_rotate_motor_output_uses_physical_direction(hand_class_name):
-    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+def test_o30_thumb_rotate_motor_output_uses_physical_direction(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
 
-    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
 
     hand.g_jointpositions_arc = [0.0] * 20
@@ -173,10 +173,10 @@ def test_o30i_thumb_rotate_motor_output_uses_physical_direction(hand_class_name)
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_four_finger_roll_outputs_reverse_urdf_limits(hand_class_name):
-    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+def test_o30_four_finger_roll_outputs_reverse_urdf_limits(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
 
-    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
 
     roll_joints = (
@@ -198,10 +198,10 @@ def test_o30i_four_finger_roll_outputs_reverse_urdf_limits(hand_class_name):
 
 
 @pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
-def test_o30i_thumb_mcp_uses_actual_control_output_order(hand_class_name):
-    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i as linkerforce_o30i
+def test_o30_thumb_mcp_uses_actual_control_output_order(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
 
-    hand = getattr(linkerforce_o30i, hand_class_name)(FakeHandCore())
+    hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
     hand.motor_constraints = [{"enabled": False} for _ in range(20)]
 
@@ -214,7 +214,7 @@ def test_o30i_thumb_mcp_uses_actual_control_output_order(hand_class_name):
     assert hand.g_jointpositions[6] == 255
 
 
-def test_linkerforce_retarget_uses_o30i_topic_joint_names(monkeypatch):
+def test_linkerforce_retarget_uses_o30_topic_joint_names(monkeypatch):
     _install_ros_stubs(monkeypatch)
 
     from linkerhand_retarget.motion.linkerforce.retarget import Retarget
@@ -222,10 +222,10 @@ def test_linkerforce_retarget_uses_o30i_topic_joint_names(monkeypatch):
     retarget = Retarget.__new__(Retarget)
     hand = SimpleNamespace(
         g_jointpositions=[0] * 20,
-        topic_joint_names=O30I_EXPECTED_TOPIC_NAMES,
+        topic_joint_names=O30_EXPECTED_TOPIC_NAMES,
     )
 
-    assert retarget._joint_names_for(hand) == list(O30I_EXPECTED_TOPIC_NAMES)
+    assert retarget._joint_names_for(hand) == list(O30_EXPECTED_TOPIC_NAMES)
 
 
 def _state_calibration():
@@ -247,13 +247,13 @@ def _pose_with_thumb_roll(value):
     return pose
 
 
-def test_o30i_right_thumb_cmc_yaw_uses_right_hand_motion_direction():
-    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+def test_o30_right_thumb_cmc_yaw_uses_right_hand_motion_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         ROBOT_FIST_RIGHT,
         ROBOT_OPOSE_RIGHT,
         ROBOT_ORIGINAL_RIGHT,
     )
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
@@ -271,13 +271,13 @@ def test_o30i_right_thumb_cmc_yaw_uses_right_hand_motion_direction():
     assert open_yaw < opose_yaw < fist_yaw
 
 
-def test_o30i_right_thumb_cmc_roll_uses_right_hand_motion_direction():
-    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+def test_o30_right_thumb_cmc_roll_uses_right_hand_motion_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         ROBOT_FIST_RIGHT,
         ROBOT_OPOSE_RIGHT,
         ROBOT_ORIGINAL_RIGHT,
     )
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
@@ -300,8 +300,12 @@ def test_o30i_right_thumb_cmc_roll_uses_right_hand_motion_direction():
     assert open_roll < opose_roll < fist_roll
 
 
-def test_o30i_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction():
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+def test_o30_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
+        ROBOT_FIST_RIGHT,
+        ROBOT_OPOSE_RIGHT,
+    )
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
@@ -320,12 +324,13 @@ def test_o30i_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction():
         hand.joint_update(realtime_fist)
     fist_roll = hand.g_jointpositions_arc[0]
 
-    assert open_roll < 0.1
-    assert fist_roll > 0.5
+    assert 0.0 <= open_roll < ROBOT_OPOSE_RIGHT[0]
+    assert ROBOT_OPOSE_RIGHT[0] < fist_roll <= ROBOT_FIST_RIGHT[0]
+    assert open_roll < fist_roll
 
 
-def test_o30i_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction():
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+def test_o30_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction():
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
@@ -348,8 +353,8 @@ def test_o30i_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction():
     assert fist_yaw > 1.4
 
 
-def test_o30i_right_hand_keeps_dynamicweight_output_without_thumb_overrides(monkeypatch):
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+def test_o30_right_hand_keeps_dynamicweight_output_without_thumb_overrides(monkeypatch):
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False
@@ -371,13 +376,13 @@ def test_o30i_right_hand_keeps_dynamicweight_output_without_thumb_overrides(monk
     assert hand.g_jointpositions_arc[1] == pytest.approx(base_arc[1])
 
 
-def test_o30i_side_roll_mapping_uses_opose_anchor_without_enabling_fist():
-    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+def test_o30_side_roll_mapping_uses_opose_anchor_without_enabling_fist():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         MULTI_SEGMENT_CONFIG,
         ROBOT_ORIGINAL_RIGHT,
         ROBOT_OPOSE_RIGHT,
     )
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     assert MULTI_SEGMENT_CONFIG["states"] == ["original", "opose"]
 
@@ -402,13 +407,13 @@ def test_o30i_side_roll_mapping_uses_opose_anchor_without_enabling_fist():
         assert opose_arcs[arc_idx] != pytest.approx(original_arcs[arc_idx])
 
 
-def test_o30i_right_ring_side_roll_moves_from_open_zero_to_negative_target():
-    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+def test_o30_right_ring_side_roll_moves_from_open_zero_to_negative_target():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         ROBOT_FIST_RIGHT,
         ROBOT_ORIGINAL_RIGHT,
         ROBOT_OPOSE_RIGHT,
     )
-    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30i import RightHand
+    from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
     hand.smooth_enabled = False

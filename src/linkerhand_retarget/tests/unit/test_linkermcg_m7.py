@@ -110,6 +110,22 @@ def test_parse_m7_flat_envelope_keeps_documented_order():
     assert envelope.right_hand == [float(value) for value in range(20, 40)]
 
 
+def test_parse_m7_minimal_left_right_payload_infers_o6_schema():
+    payload = {
+        "leftHand": [0, 1, 2, 3, 4, 5],
+        "rightHand": [10, 11, 12, 13, 14, 15],
+    }
+
+    envelope = parse_stroke_envelope(json.dumps(payload).encode("utf-8"))
+
+    assert envelope.schema_id == "linker.stroke6.flat.v1"
+    assert envelope.hand_type == "LinkerHand/O6"
+    assert envelope.dof == 6
+    assert envelope.labels == ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
+    assert envelope.left_hand == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    assert envelope.right_hand == [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+
+
 def test_parse_m7_flat_envelope_rejects_dof_length_mismatch():
     payload = {
         "schemaId": "linker.stroke6.flat.v1",
@@ -213,6 +229,7 @@ def test_m7_udp_client_warns_when_only_heartbeat_arrives_without_json():
         (RobotName.l20lite, 10),
         (RobotName.l20, 20),
         (RobotName.o20, 20),
+        (RobotName.o30, 20),
         (RobotName.g20, 20),
         (RobotName.l25, 20),
     ],
@@ -226,11 +243,13 @@ def test_expected_dof_accepts_same_named_robot_enum_from_runtime_import():
 
     assert RuntimeRobotName is not RobotName
     assert expected_dof_for_robot(RuntimeRobotName.o20) == 20
+    assert expected_dof_for_robot(RuntimeRobotName.o30) == 20
 
 
-def test_expected_dof_rejects_undocumented_m7_robot_model():
-    with pytest.raises(ValueError, match="不支持"):
-        expected_dof_for_robot(RobotName.o30i)
+def test_expected_dof_rejects_retired_o30_variant_name():
+    retired_name = "o30" + "i"
+
+    assert retired_name not in RobotName.__members__
 
 
 def test_direct_hand_mapping_copies_m7_command_order_without_old_reorder():

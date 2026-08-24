@@ -9,7 +9,7 @@ from linkerhand_retarget.motion.linkerforce.hand import (
     linkerforce_l20,
     linkerforce_l6,
     linkerforce_o20,
-    linkerforce_o30i,
+    linkerforce_o30,
     linkerforce_o6,
 )
 
@@ -215,7 +215,7 @@ class FakeHandCore:
             },
         ),
         (
-            linkerforce_o30i.RightHand,
+            linkerforce_o30.RightHand,
             (
                 "thumb_cmc_roll",
                 "thumb_cmc_yaw",
@@ -353,12 +353,12 @@ def test_g20_l20_mujoco_display_routes_passive_distal_joints():
         assert positions["joint_20"] == 19.0
 
 
-def test_o30i_mujoco_display_routes_passive_distal_joints():
+def test_o30_mujoco_display_routes_passive_distal_joints():
     joint_names = tuple(f"joint_{index}" for index in range(20))
 
     for hand in (
-        linkerforce_o30i.RightHand(FakeHandCore()),
-        linkerforce_o30i.LeftHand(FakeHandCore()),
+        linkerforce_o30.RightHand(FakeHandCore()),
+        linkerforce_o30.LeftHand(FakeHandCore()),
     ):
         hand.g_jointpositions_arc = [float(index) for index in range(20)]
 
@@ -375,9 +375,9 @@ def test_o30i_mujoco_display_routes_passive_distal_joints():
         assert positions["joint_19"] == 18.0
 
 
-def test_o30i_left_mujoco_display_keeps_thumb_cmc_yaw_direction():
+def test_o30_left_mujoco_display_keeps_thumb_cmc_yaw_direction():
     joint_names = ("thumb_cmc_roll", "thumb_cmc_yaw")
-    hand = linkerforce_o30i.LeftHand(FakeHandCore())
+    hand = linkerforce_o30.LeftHand(FakeHandCore())
     hand.g_jointpositions_arc[1] = 1.2
 
     positions = extract_mujoco_joint_positions(
@@ -390,15 +390,15 @@ def test_o30i_left_mujoco_display_keeps_thumb_cmc_yaw_direction():
     assert positions["thumb_cmc_yaw"] == pytest.approx(1.2)
 
 
-def test_o30i_right_mujoco_display_keeps_thumb_cmc_roll_and_yaw_direction():
-    from linkerhand_retarget.motion.linkerforce.config.o30i_config import (
+def test_o30_right_mujoco_display_keeps_thumb_cmc_roll_and_yaw_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         ROBOT_FIST_RIGHT,
         ROBOT_OPOSE_RIGHT,
         ROBOT_ORIGINAL_RIGHT,
     )
 
     joint_names = ("thumb_cmc_roll", "thumb_cmc_yaw")
-    hand = linkerforce_o30i.RightHand(FakeHandCore())
+    hand = linkerforce_o30.RightHand(FakeHandCore())
 
     hand.g_jointpositions_arc[0] = ROBOT_ORIGINAL_RIGHT[0]
     hand.g_jointpositions_arc[1] = ROBOT_ORIGINAL_RIGHT[1]

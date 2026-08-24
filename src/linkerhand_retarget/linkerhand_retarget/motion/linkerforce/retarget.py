@@ -68,7 +68,6 @@ MOTOR_OUTPUT_RUNTIME_CONFIG_MODULES = {
     RobotName.l20: "l20_config",
     RobotName.o20: "o20_config",
     RobotName.o30: "o30_config",
-    RobotName.o30i: "o30i_config",
     RobotName.l25: "g20_config",
     RobotName.g20: "g20_config",
 }
@@ -155,9 +154,6 @@ class Retarget():
         elif self.righthandtype == RobotName.o30:
             from .hand.linkerforce_o30 import RightHand
             self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand], is_debug=mapper_debug)
-        elif self.righthandtype == RobotName.o30i:
-            from .hand.linkerforce_o30i import RightHand
-            self.righthand = RightHand(handcore, length=ROBOT_LEN_MAP[righthand], is_debug=mapper_debug)
         elif self.righthandtype == RobotName.l25 \
             or self.righthandtype == RobotName.g20:
             from .hand.linkerforce_g20 import RightHand
@@ -191,9 +187,6 @@ class Retarget():
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
         elif self.lefthandtype == RobotName.o30:
             from .hand.linkerforce_o30 import LeftHand
-            self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
-        elif self.lefthandtype == RobotName.o30i:
-            from .hand.linkerforce_o30i import LeftHand
             self.lefthand = LeftHand(handcore, length=ROBOT_LEN_MAP[lefthand], is_debug=mapper_debug)
         elif self.lefthandtype == RobotName.l25 \
             or self.lefthandtype == RobotName.g20:
