@@ -494,7 +494,7 @@ def test_linkerforce_candidate_init_seeds_detected_left_reader(monkeypatch):
             self.serial_port = FakeSerialPort(self)
             return True
 
-        def query_version_sync(self):
+        def query_version_sync(self, log_version_hint=True):
             for _ in range(10):
                 self.version_query_count += 1
                 self.serial_port.write(self.pack_01_data())
@@ -617,7 +617,7 @@ def test_linkerforce_auto_scan_detects_actual_right_hand_before_saved_ports(monk
             self.baudrate = baudrate
             return port == "/dev/ttyUSB0"
 
-        def query_version_sync(self):
+        def query_version_sync(self, log_version_hint=True):
             for _ in range(10):
                 self.version_query_count += 1
                 self.serial_port.write(self.pack_01_data())

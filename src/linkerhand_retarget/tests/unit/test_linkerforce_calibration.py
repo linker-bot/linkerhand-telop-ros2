@@ -558,6 +558,11 @@ def test_process_stops_without_entering_spin_when_calibration_fails(monkeypatch)
             pass
 
     monkeypatch.setattr(handretarget_module, "HandRetargetNode", FakeNode)
+    monkeypatch.setattr(
+        handretarget_module,
+        "MultiThreadedExecutor",
+        type("FakeExecutor", (), {}),
+    )
     monkeypatch.setattr(handretarget_module.rclpy, "init", lambda args=None: None)
     monkeypatch.setattr(handretarget_module.rclpy, "shutdown", lambda: None)
     monkeypatch.setattr(handretarget_module.rclpy, "spin", lambda node, executor: events.__setitem__("spin_called", events["spin_called"] + 1))

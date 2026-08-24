@@ -1,8 +1,12 @@
 build/
 install/
 log/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 source.txt
 docs/
 src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/tmp/*.tmp
 src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/tmp/*.log
+src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/hand/temp/
 src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/log/

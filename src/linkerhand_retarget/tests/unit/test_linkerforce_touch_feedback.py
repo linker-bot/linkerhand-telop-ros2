@@ -72,15 +72,14 @@ class GuardedSerialPort:
         self.writes.append(data)
 
 
-def make_touch_payload(value):
-    matrix = [[value, 0], [0, value / 2]]
+def make_touch_payload(mass):
     return json.dumps(
         {
-            "thumb_matrix": matrix,
-            "index_matrix": matrix,
-            "middle_matrix": matrix,
-            "ring_matrix": matrix,
-            "little_matrix": matrix,
+            "thumb_mass": mass,
+            "index_mass": mass,
+            "middle_mass": mass,
+            "ring_mass": mass,
+            "little_mass": mass,
         }
     )
 
@@ -102,9 +101,9 @@ def test_touch_callback_caches_force_values_without_serial_write(monkeypatch):
         pack_04_data=lambda: b"force",
     )
 
-    retarget.process_touch_data(make_touch_payload(2.0), "right")
+    retarget.process_touch_data(make_touch_payload(380.0), "right")
 
-    assert retarget.results["right"]["forcelist"] == [8.0, 8.0, 8.0, 8.0, 8.0]
+    assert retarget._get_force_feedback_payload("right") == [185.0] * 5
     assert serial_port.writes == []
 
 
@@ -118,21 +117,9 @@ def test_touch_callback_clamps_negative_force_values_to_zero(monkeypatch):
     retarget.forcelock = TrackingLock()
     retarget.results = {"left": {}, "right": {}}
 
-    matrix = [[-1, -1], [-1, -1]]
-    retarget.process_touch_data(
-        json.dumps(
-            {
-                "thumb_matrix": matrix,
-                "index_matrix": matrix,
-                "middle_matrix": matrix,
-                "ring_matrix": matrix,
-                "little_matrix": matrix,
-            }
-        ),
-        "right",
-    )
+    retarget.process_touch_data(make_touch_payload(-1.0), "right")
 
-    assert retarget.results["right"]["forcelist"] == [0.0, 0.0, 0.0, 0.0, 0.0]
+    assert retarget._get_force_feedback_payload("right") == [0.0] * 5
 
 
 def test_force_feedback_worker_writes_latest_force_outside_callback_lock(monkeypatch):

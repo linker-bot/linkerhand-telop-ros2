@@ -303,7 +303,7 @@ def test_o30_right_thumb_cmc_roll_uses_right_hand_motion_direction():
 def test_o30_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction():
     from linkerhand_retarget.motion.linkerforce.config.o30_config import (
         ROBOT_FIST_RIGHT,
-        ROBOT_OPOSE_RIGHT,
+        ROBOT_ORIGINAL_RIGHT,
     )
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
@@ -324,12 +324,16 @@ def test_o30_right_thumb_cmc_roll_maps_realtime_open_to_fist_direction():
         hand.joint_update(realtime_fist)
     fist_roll = hand.g_jointpositions_arc[0]
 
-    assert 0.0 <= open_roll < ROBOT_OPOSE_RIGHT[0]
-    assert ROBOT_OPOSE_RIGHT[0] < fist_roll <= ROBOT_FIST_RIGHT[0]
+    assert ROBOT_ORIGINAL_RIGHT[0] <= open_roll <= ROBOT_FIST_RIGHT[0]
+    assert ROBOT_ORIGINAL_RIGHT[0] <= fist_roll <= ROBOT_FIST_RIGHT[0]
     assert open_roll < fist_roll
 
 
 def test_o30_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction():
+    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
+        ROBOT_FIST_RIGHT,
+        ROBOT_ORIGINAL_RIGHT,
+    )
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 import RightHand
 
     hand = RightHand(FakeHandCore())
@@ -349,8 +353,9 @@ def test_o30_right_thumb_cmc_yaw_maps_realtime_open_to_fist_direction():
         hand.joint_update(realtime_fist)
     fist_yaw = hand.g_jointpositions_arc[1]
 
-    assert open_yaw < 0.2
-    assert fist_yaw > 1.4
+    assert ROBOT_ORIGINAL_RIGHT[1] <= open_yaw <= ROBOT_FIST_RIGHT[1]
+    assert ROBOT_ORIGINAL_RIGHT[1] <= fist_yaw <= ROBOT_FIST_RIGHT[1]
+    assert open_yaw < fist_yaw
 
 
 def test_o30_right_hand_keeps_dynamicweight_output_without_thumb_overrides(monkeypatch):
