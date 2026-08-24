@@ -128,6 +128,8 @@ class Retarget():
         self.fist_extend_ratio = self.baseconfig.get('calibration', {}).get('fist_extend_ratio', 0.5)
         debug_config = self.baseconfig.get('debug', {})
         self.motor_output_limit_debug = debug_config.get('motor_output_limit_debug', False)
+        # 力反馈斜率增益：放大 mass→阻力扭矩 的斜率，相同 mass 输出更大力，1.0=不变
+        self.force_feedback_slope_gain = float(self.baseconfig.get('force_feedback', {}).get('slope_gain', 1.0))
         # 命令行串口参数（候选列表，系统自动识别左右手）
         self.cmd_ports = cmd_ports
         self.cmd_baudrate = cmd_baudrate
@@ -374,13 +376,16 @@ class Retarget():
     def process_touch_data(self, json_str, hand_type):
         # 触发阈值：合力 mass > TRIGGER_MASS_THRESHOLD (g) 才输出力反馈
         # mass 量程 0-2000 g，误差约 10%，故取 200 作为触发底噪线
-        # 触发后使用带 onset 偏置的线性映射：mass ∈ [200, 2000] → force ∈ [FORCE_ONSET, 500]
-        # FORCE_ONSET 是接触瞬间的初始反馈力，用于让操作员即时感知到"碰到了"
-        # MAX_FORCE_OUTPUT 与老版本保持一致（500 对应舵机 50% 扭矩，末端约 1.8 N）
+        # 触发后使用带 onset 偏置的线性映射：mass ∈ [200, 2000] → force ∈ [FORCE_ONSET, ...]
+        # FORCE_ONSET 是接触瞬间的初始反馈力，让操作员即时感知"碰到了"（不随斜率增益变化）
+        # MAX_FORCE_OUTPUT 是 slope_gain=1 时 mass 满量程对应的力（500 对应舵机 50% 扭矩，末端约 1.8 N）
+        # slope_gain 放大斜率：相同 mass 输出更大力，最终钳位到舵机满量程 FORCE_HARDWARE_LIMIT(=1000, 100% 扭矩)
         TRIGGER_MASS_THRESHOLD = 200
         MASS_RANGE_MAX = 2000
         FORCE_ONSET = 150
         MAX_FORCE_OUTPUT = 500
+        FORCE_HARDWARE_LIMIT = 1000
+        slope_gain = self.force_feedback_slope_gain
         FINGER_MASS_KEYS = [
             ('thumb_matrix', 'thumb_mass'),
             ('index_matrix', 'index_mass'),
@@ -396,8 +401,8 @@ class Retarget():
                     mass = float(data.get(mass_key, 0))
                     if mass > TRIGGER_MASS_THRESHOLD:
                         ratio = (mass - TRIGGER_MASS_THRESHOLD) / (MASS_RANGE_MAX - TRIGGER_MASS_THRESHOLD)
-                        max_force = FORCE_ONSET + ratio * (MAX_FORCE_OUTPUT - FORCE_ONSET)
-                        max_force = min(max_force, MAX_FORCE_OUTPUT)
+                        max_force = FORCE_ONSET + slope_gain * ratio * (MAX_FORCE_OUTPUT - FORCE_ONSET)
+                        max_force = min(max_force, FORCE_HARDWARE_LIMIT)
                     else:
                         max_force = 0
                     self.results[hand_type][finger_key] = {
