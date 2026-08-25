@@ -8,6 +8,8 @@ debug:
   linkerforce_packet_log_debug: false
   mapper_debug: false
   motor_output_limit_debug: false
+force_feedback:
+  slope_gain: 1.0
 humanset:
   bodyfile: body_unity_pose
   targethandfile: human_hand_info

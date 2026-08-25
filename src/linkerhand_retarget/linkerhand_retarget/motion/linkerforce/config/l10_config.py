@@ -40,7 +40,7 @@ FINGER_CONFIGS = {
         'name': '拇指弯曲',
         'joints': [2, 3, 4],
         'weights': {
-            'v1': [0.2, 0, 0.8],
+            'v1': [0, 0, 1],
             'v2': [0, 0, 1]
         },
         'robot_idx': 2,
@@ -52,8 +52,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
-            'extended_exp_factor': 20
+            'scale_factor': 1,
+            'extended_exp_factor': 25
         }
     },
     'index_roll': {
@@ -91,8 +91,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
-            'extended_exp_factor': 25
+            'scale_factor': 0.8,
+            'extended_exp_factor': 1
         }
     },
     'middle_root_flexion': {
@@ -111,8 +111,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
-            'extended_exp_factor': 25
+            'scale_factor': 1.1,
+            'extended_exp_factor': 1
         }
     },
     'ring_roll': {
@@ -292,7 +292,7 @@ MOTOR_CONSTRAINTS = {
         {'min': 0, 'max': 255, 'enabled': False},   # motor 6: 食指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 7: 无名指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 8: 小指侧摆
-        {'min': 220, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
+        {'min': 210, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
     ],
     'right': [
         {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指弯曲
@@ -304,6 +304,6 @@ MOTOR_CONSTRAINTS = {
         {'min': 0, 'max': 255, 'enabled': False},   # motor 6: 食指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 7: 无名指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 8: 小指侧摆
-        {'min': 220, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
+        {'min': 210, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
     ]
 }
