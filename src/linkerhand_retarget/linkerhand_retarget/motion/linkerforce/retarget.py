@@ -344,13 +344,13 @@ class Retarget():
         )
         self.left_touch_subscription = self.touch_node.create_subscription(
             String,
-            '/cb_left_hand_matrix_touch',
+            '/cb_left_hand_matrix_touch_mass',
             self.touch_left_callback,
             1,
         )
         self.right_touch_subscription = self.touch_node.create_subscription(
             String,
-            '/cb_right_hand_matrix_touch',
+            '/cb_right_hand_matrix_touch_mass',
             self.touch_right_callback,
             1,
         )
