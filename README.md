@@ -12,7 +12,7 @@ This repository contains the standalone ROS2 source workspace for LinkerHand tel
 - Robot model assets
 - Offline unit tests and integration test examples
 
-Current SDK version: `2.12.8`. See [VERSION.md](VERSION.md) for release notes.
+Current SDK version: `2.12.10`. See [VERSION.md](VERSION.md) for release notes.
 
 <p style="color: #b7791f;"><em>Warning: This release uses a source-workspace delivery path. After <code>colcon build --symlink-install</code>, configuration and robot model assets are still read from the package source tree, so keep the workspace layout shown below. Wheel-style installation or copying only the <code>install/</code> directory is not supported for this release.</em></p>
 
@@ -28,7 +28,7 @@ Current SDK version: `2.12.8`. See [VERSION.md](VERSION.md) for release notes.
 | LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkermcg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README.md) |
 | LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkereg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README.md) |
 
-O20 and O30 are currently supported only through the LinkerFFG (`linkerforce`) data-glove pipeline. Other data-glove modules do not support these two models in this release.
+LinkerMCG M7 adds the shared M-series UDP path for O20. LinkerMCG M11 extends that path with the dedicated O20 16-dof schema and O30 support.
 
 ## ROS2 Compatibility
 
@@ -111,10 +111,10 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 
 | Config | Description | Options |
 |--------|-------------|---------|
-| `motion_type` | Data glove type | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkereg1`, `linkereg2` |
+| `motion_type` | Data glove type | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkermcg_m7`, `linkermcg_m11`, `linkereg1`, `linkereg2` |
 | `datasource_type` | Data source type | `motion` |
 | `retargeting_type` | Retargeting type | `projection` |
-| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30` (`o20`/`o30` require `motion_type: linkerforce`) |
+| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30` (`o20` is supported by `motion_type: linkerforce`, `linkermcg_m7`, or `linkermcg_m11`; `o30` is supported by `linkerforce` or `linkermcg_m11`) |
 | `robotname_l` | Left hand robot model | same as above |
 | `motion_device` | Motion device ID, used by selected motion sources | e.g. `eric` |
 

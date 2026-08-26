@@ -1,4 +1,5 @@
 import json
+import enum
 import sys
 import types
 from types import SimpleNamespace
@@ -229,7 +230,6 @@ def test_m7_udp_client_warns_when_only_heartbeat_arrives_without_json():
         (RobotName.l20lite, 10),
         (RobotName.l20, 20),
         (RobotName.o20, 20),
-        (RobotName.o30, 20),
         (RobotName.g20, 20),
         (RobotName.l25, 20),
     ],
@@ -239,11 +239,16 @@ def test_expected_dof_for_supported_m7_robot_models(robot_name, expected):
 
 
 def test_expected_dof_accepts_same_named_robot_enum_from_runtime_import():
-    from linkerhand.constants import RobotName as RuntimeRobotName
+    class RuntimeRobotName(enum.Enum):
+        o20 = "o20"
 
     assert RuntimeRobotName is not RobotName
     assert expected_dof_for_robot(RuntimeRobotName.o20) == 20
-    assert expected_dof_for_robot(RuntimeRobotName.o30) == 20
+
+
+def test_expected_dof_rejects_o30_because_m7_does_not_support_o30():
+    with pytest.raises(ValueError, match="o30"):
+        expected_dof_for_robot(RobotName.o30)
 
 
 def test_expected_dof_rejects_l30_until_m7_has_18_dof_schema():

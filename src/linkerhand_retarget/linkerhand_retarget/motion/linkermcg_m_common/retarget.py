@@ -5,10 +5,16 @@ from linkerhand_retarget.linkerhand.constants import RobotName
 from linkerhand_retarget.linkerhand.handcore import HandCore
 
 from .hand.direct_hand import LeftHand, RightHand, expected_dof_for_robot
-from .protocol import LinkerMcgM7UdpClient
+from .protocol import LinkerMcgUdpClient
 
 
 class Retarget:
+    motion_label = "M"
+    udp_client_class = LinkerMcgUdpClient
+    right_hand_class = RightHand
+    left_hand_class = LeftHand
+    expected_dof_func = staticmethod(expected_dof_for_robot)
+
     def __init__(
         self,
         node,
@@ -35,10 +41,10 @@ class Retarget:
         self._last_mismatch_log = {}
         self.loaded_hands = ()
 
-        self.expected_dof_r = expected_dof_for_robot(self.righthandtype)
-        self.expected_dof_l = expected_dof_for_robot(self.lefthandtype)
-        self.righthand = RightHand(handcore, length=self.expected_dof_r)
-        self.lefthand = LeftHand(handcore, length=self.expected_dof_l)
+        self.expected_dof_r = self.expected_dof_func(self.righthandtype)
+        self.expected_dof_l = self.expected_dof_func(self.lefthandtype)
+        self.righthand = self.right_hand_class(handcore, length=self.expected_dof_r)
+        self.lefthand = self.left_hand_class(handcore, length=self.expected_dof_l)
 
         self.publisher_r = self.node.create_publisher(
             JointState,
@@ -53,27 +59,36 @@ class Retarget:
         self.timer = self.node.create_timer(1.0 / 120, self.process_callback)
 
     def initialize_udp(self) -> bool:
-        self.udp_datacapture = LinkerMcgM7UdpClient(
+        self.udp_datacapture = self.udp_client_class(
             host=self.udp_ip,
             port=self.udp_port,
             logger=self.node.get_logger(),
         )
         if self.udp_datacapture.udp_initial():
             self.node.get_logger().info(
-                f"LinkerMCG M7 UDP 初始化成功: {self.udp_ip}:{self.udp_port}"
+                f"LinkerMCG {self.motion_label} UDP 初始化成功: {self.udp_ip}:{self.udp_port}"
             )
             self.running = True
             return True
-        self.node.get_logger().error("LinkerMCG M7 UDP 初始化失败")
+        self.node.get_logger().error(f"LinkerMCG {self.motion_label} UDP 初始化失败")
         return False
 
-    def _hand_data_compatible(self, hand: str, values, dof: int) -> bool:
+    def _payload_mismatch_detail(self, robot_name: RobotName, mocapdata) -> str:
+        return ""
+
+    def _hand_data_compatible(self, hand: str, values, mocapdata) -> bool:
         expected = self.expected_dof_l if hand == "left" else self.expected_dof_r
+        robot_name = self.lefthandtype if hand == "left" else self.righthandtype
+        dof = getattr(mocapdata, "dof", 0)
         if int(dof or 0) != expected:
             self._log_mismatch_once_per_second(hand, f"dof={dof}, expected={expected}")
             return False
         if len(values) < expected:
             self._log_mismatch_once_per_second(hand, f"len={len(values)}, expected={expected}")
+            return False
+        mismatch_detail = self._payload_mismatch_detail(robot_name, mocapdata)
+        if mismatch_detail:
+            self._log_mismatch_once_per_second(hand, mismatch_detail)
             return False
         return True
 
@@ -81,7 +96,9 @@ class Retarget:
         now = self.node.get_clock().now().nanoseconds / 1e9
         last = self._last_mismatch_log.get(hand, 0.0)
         if now - last >= 1.0:
-            self.node.get_logger().warn(f"LinkerMCG M7 {hand} 数据与配置不匹配: {detail}")
+            self.node.get_logger().warn(
+                f"LinkerMCG {self.motion_label} {hand} 数据与配置不匹配: {detail}"
+            )
             self._last_mismatch_log[hand] = now
 
     def _publish_hand(self, publisher, hand_model, values):
@@ -104,20 +121,20 @@ class Retarget:
         self._last_frame_index = mocapdata.frame_index
 
         loaded_hands = []
-        if self._hand_data_compatible("left", mocapdata.jointangle_lHand, mocapdata.dof):
+        if self._hand_data_compatible("left", mocapdata.jointangle_lHand, mocapdata):
             self._publish_hand(self.publisher_l, self.lefthand, mocapdata.jointangle_lHand)
             loaded_hands.append("left")
             if self.lefthandpubprint and self.pubprintcount % 30 == 0:
                 self.node.get_logger().info(
-                    f"[LinkerMCG M7] 左手 {mocapdata.hand_type}: {self.lefthand.g_jointpositions}"
+                    f"[LinkerMCG {self.motion_label}] 左手 {mocapdata.hand_type}: {self.lefthand.g_jointpositions}"
                 )
 
-        if self._hand_data_compatible("right", mocapdata.jointangle_rHand, mocapdata.dof):
+        if self._hand_data_compatible("right", mocapdata.jointangle_rHand, mocapdata):
             self._publish_hand(self.publisher_r, self.righthand, mocapdata.jointangle_rHand)
             loaded_hands.append("right")
             if self.righthandpubprint and self.pubprintcount % 30 == 0:
                 self.node.get_logger().info(
-                    f"[LinkerMCG M7] 右手 {mocapdata.hand_type}: {self.righthand.g_jointpositions}"
+                    f"[LinkerMCG {self.motion_label}] 右手 {mocapdata.hand_type}: {self.righthand.g_jointpositions}"
                 )
 
         self.loaded_hands = tuple(loaded_hands)
@@ -132,4 +149,6 @@ class Retarget:
             self.udp_datacapture.udp_close()
 
     def set_mode(self, mode, param=None):
-        self.node.get_logger().info(f"LinkerMCG M7 当前仅支持默认 glove 模式: {mode}")
+        self.node.get_logger().info(
+            f"LinkerMCG {self.motion_label} 当前仅支持默认 glove 模式: {mode}"
+        )

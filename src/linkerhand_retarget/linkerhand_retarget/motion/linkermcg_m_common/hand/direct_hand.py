@@ -1,7 +1,7 @@
 import math
 from typing import Iterable
 
-_M7_ROBOT_DOF_BY_NAME = {
+_ROBOT_DOF_BY_NAME = {
     "o6": 6,
     "l6": 6,
     "l10": 10,
@@ -9,6 +9,7 @@ _M7_ROBOT_DOF_BY_NAME = {
     "l20lite": 10,
     "l20": 20,
     "o20": 20,
+    "o30": 20,
     "g20": 20,
     "l25": 20,
 }
@@ -17,9 +18,9 @@ _M7_ROBOT_DOF_BY_NAME = {
 def expected_dof_for_robot(robot_name) -> int:
     robot_key = getattr(robot_name, "name", str(robot_name))
     try:
-        return _M7_ROBOT_DOF_BY_NAME[robot_key]
+        return _ROBOT_DOF_BY_NAME[robot_key]
     except KeyError as exc:
-        raise ValueError(f"LinkerMCG M7 暂不支持机械手型号: {robot_key}") from exc
+        raise ValueError(f"LinkerMCG M 系列暂不支持机械手型号: {robot_key}") from exc
 
 
 def _clamp_motor_value(value) -> int:
@@ -33,7 +34,7 @@ def _clamp_motor_value(value) -> int:
 
 
 class DirectHand:
-    """M7 行程数据已是机械手下发顺序，这里只做长度截断和 0..255 保护。"""
+    """M 系列行程数据已是机械手下发顺序，这里只做长度截断和 0..255 保护。"""
 
     def __init__(self, handcore=None, length=6):
         self.handcore = handcore

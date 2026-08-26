@@ -87,11 +87,16 @@ _script_dir = str(Path(__file__).parent)
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from linkerhand.utils import *
-from linkerhand.vtrdyncore import *
-from linkerhand.handcore import HandCore
-from linkerhand.config import HandConfig
-from linkerhand.constants import RetargetingType, DataSource, MotionSource, RobotName
+from linkerhand_retarget.linkerhand.utils import *
+from linkerhand_retarget.linkerhand.vtrdyncore import *
+from linkerhand_retarget.linkerhand.handcore import HandCore
+from linkerhand_retarget.linkerhand.config import HandConfig
+from linkerhand_retarget.linkerhand.constants import (
+    RetargetingType,
+    DataSource,
+    MotionSource,
+    RobotName,
+)
 from linkerhand_retarget.mujoco_display import (
     MujocoDisplay,
     MujocoDisplayProcess,
@@ -483,6 +488,18 @@ class HandRetargetNode(Node):
             )    
         elif self.motion_type == MotionSource.linkermcg_m7:
             from linkerhand_retarget.motion.linkermcg_m7.retarget import Retarget
+            self.retarget = Retarget(
+                self,
+                ip=self.udp_ip,
+                port=self.udp_port,
+                righthand=self.robot_name_r,
+                lefthand=self.robot_name_l,
+                handcore=self.handcore,
+                lefthandpubprint=self.lefthandprint,
+                righthandpubprint=self.righthandprint
+            )
+        elif self.motion_type == MotionSource.linkermcg_m11:
+            from linkerhand_retarget.motion.linkermcg_m11.retarget import Retarget
             self.retarget = Retarget(
                 self,
                 ip=self.udp_ip,

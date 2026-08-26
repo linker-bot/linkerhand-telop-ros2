@@ -12,7 +12,7 @@
 - 机器人模型资源
 - 离线单元测试和集成测试示例
 
-当前 SDK 版本：`2.12.8`。版本说明见 [VERSION.md](VERSION.md)。
+当前 SDK 版本：`2.12.10`。版本说明见 [VERSION.md](VERSION.md)。
 
 <p style="color: #b7791f;"><em>警告：当前交付方式基于源码工作区。执行 <code>colcon build --symlink-install</code> 后，配置和机器人模型资源仍从包源码树读取，因此请保持下方工作区结构。标准 wheel 安装或仅复制 <code>install/</code> 目录不是本版本支持的部署方式。</em></p>
 
@@ -28,7 +28,7 @@
 | LinkerMCG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkermcg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README_zh.md) |
 | LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkereg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README_zh.md) |
 
-O20、O30 目前仅支持 LinkerFFG（`linkerforce`）数据手套链路，其他数据手套模块在当前版本暂不支持这两个型号。
+LinkerMCG M7 新增了共享 M 系列 UDP 链路，对应 O20。LinkerMCG M11 在此基础上增加了专用的 O20 16 自由度协议和 O30 支持。
 
 ## ROS2 兼容性
 
@@ -111,10 +111,10 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 
 | 配置项 | 说明 | 可选值 |
 |--------|------|--------|
-| `motion_type` | 数据手套类型 | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkereg1`, `linkereg2` |
+| `motion_type` | 数据手套类型 | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg`, `linkermcg_m7`, `linkermcg_m11`, `linkereg1`, `linkereg2` |
 | `datasource_type` | 数据源类型 | `motion` |
 | `retargeting_type` | 重定向类型 | `projection` |
-| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`（`o20`/`o30` 仅适用于 `motion_type: linkerforce`） |
+| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`（`o20` 适用于 `motion_type: linkerforce`、`linkermcg_m7` 或 `linkermcg_m11`；`o30` 适用于 `linkerforce` 或 `linkermcg_m11`） |
 | `robotname_l` | 左手机械手型号 | 同上 |
 | `motion_device` | 运动设备标识，由所选 motion source 使用 | 例如 `eric` |
 

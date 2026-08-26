@@ -73,6 +73,7 @@ class TestMotionSource:
         assert MotionSource.udexreal is not None
         assert MotionSource.linkerforce is not None
         assert MotionSource.linkermcg_m7 is not None
+        assert MotionSource.linkermcg_m11 is not None
 
 
 class TestRobotNameMap:
