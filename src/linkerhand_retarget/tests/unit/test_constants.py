@@ -72,6 +72,9 @@ class TestMotionSource:
         assert MotionSource.vtrdyn is not None
         assert MotionSource.udexreal is not None
         assert MotionSource.linkerforce is not None
+        assert MotionSource.linkermcg_g7 is not None
+        assert MotionSource["linkermcg_g7"] == MotionSource.linkermcg_g7
+        assert MotionSource["linkermcg"] == MotionSource.linkermcg_g7
         assert MotionSource.linkermcg_m7 is not None
         assert MotionSource.linkermcg_m11 is not None
 

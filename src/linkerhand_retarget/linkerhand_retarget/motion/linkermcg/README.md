@@ -1,6 +1,6 @@
-# LinkerMCG Data Glove Module
+# LinkerMCG_G7 Data Glove Module
 
-LinkerMCG data glove ROS2 driver module, receives glove data via UDP and publishes to ROS2 topics.
+LinkerMCG_G7 data glove ROS2 driver module, receives glove data via UDP and publishes to ROS2 topics.
 
 ## Features
 
@@ -16,7 +16,7 @@ Edit `config/base_config.yml`:
 
 ```yaml
 system:
-  motion_type: linkermcg
+  motion_type: linkermcg_g7
 
 udp:
   ip: "<target-ip>"
@@ -24,6 +24,8 @@ udp:
 ```
 
 `udp.ip` must be the target host address that receives the UDP stream. Do not use `0.0.0.0`.
+
+The legacy value `motion_type: linkermcg` remains supported as an alias of `linkermcg_g7`.
 
 **Important:** enable both `debug.joint_motor_debug_l` and `debug.joint_motor_debug_r` to print UDP data in the debug output.
 

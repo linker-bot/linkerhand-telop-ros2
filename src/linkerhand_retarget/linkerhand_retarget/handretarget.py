@@ -474,7 +474,7 @@ class HandRetargetNode(Node):
                 righthandpubprint=self.righthandprint,
                 calibration = self.calibration
             )     
-        elif self.motion_type == MotionSource.linkermcg:
+        elif self.motion_type == MotionSource.linkermcg_g7:
             from linkerhand_retarget.motion.linkermcg.retarget import Retarget
             self.retarget = Retarget(
                 self,

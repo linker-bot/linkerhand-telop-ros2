@@ -1,6 +1,6 @@
-# LinkerMCG 数据手套模块
+# LinkerMCG_G7 数据手套模块
 
-LinkerMCG 数据手套的 ROS2 驱动模块，通过 UDP 接收手套数据并发布到 ROS2 话题。
+LinkerMCG_G7 数据手套的 ROS2 驱动模块，通过 UDP 接收手套数据并发布到 ROS2 话题。
 
 ## 特性
 
@@ -16,7 +16,7 @@ LinkerMCG 数据手套的 ROS2 驱动模块，通过 UDP 接收手套数据并�
 
 ```yaml
 system:
-  motion_type: linkermcg
+  motion_type: linkermcg_g7
 
 udp:
   ip: "<目标地址>"
@@ -24,6 +24,8 @@ udp:
 ```
 
 `udp.ip` 必须填写接收 UDP 数据的目标主机地址，不要使用 `0.0.0.0`。
+
+旧配置值 `motion_type: linkermcg` 仍作为 `linkermcg_g7` 的兼容别名保留。
 
 **重要：** 必须同时打开 `debug.joint_motor_debug_l` 和 `debug.joint_motor_debug_r`，调试输出中才会打印 UDP 数据。
 
