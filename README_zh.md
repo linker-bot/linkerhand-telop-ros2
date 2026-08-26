@@ -25,7 +25,7 @@
 | LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README_zh.md) |
 | VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/vtrdyn` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README_zh.md) |
 | LinkerTG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/udexreal` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README_zh.md) |
-| LinkerMCG_G7 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README_zh.md) |
+| LinkerMCG_G7 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | `motion/linkermcg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README_zh.md) |
 | LinkerMCG_M7 | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ | - | `motion/linkermcg_m7` | [协议](LinkerHand_UDP_M7&M11.md) |
 | LinkerMCG_M11 | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg_m11` | [协议](LinkerHand_UDP_M7&M11.md) |
 | LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkereg` | [README_zh](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README_zh.md) |
@@ -116,7 +116,7 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `motion_type` | 数据手套类型 | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg_g7`, `linkermcg_m7`, `linkermcg_m11`, `linkereg1`, `linkereg2`（`linkermcg` 是 `linkermcg_g7` 的兼容别名） |
 | `datasource_type` | 数据源类型 | `motion` |
 | `retargeting_type` | 重定向类型 | `projection` |
-| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`（`o20` 适用于 `linkerforce`、`linkermcg_g7`、`linkermcg_m7` 或 `linkermcg_m11`；`o30` 适用于 `linkerforce`、`linkermcg_g7` 或 `linkermcg_m11`） |
+| `robotname_r` | 右手机械手型号 | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30`（`o20` 适用于 `linkerforce`、`linkermcg_g7`、`linkermcg_m7` 或 `linkermcg_m11`；`o30` 适用于 `linkerforce` 或 `linkermcg_m11`） |
 | `robotname_l` | 左手机械手型号 | 同上 |
 | `motion_device` | 运动设备标识，由所选 motion source 使用 | 例如 `eric` |
 

@@ -25,7 +25,7 @@ Current SDK version: `2.12.9`. See [VERSION.md](VERSION.md) for release notes.
 | LinkerFFG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkerforce` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkerforce/README.md) |
 | VTR-DYN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/vtrdyn` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/vtrdyn/README.md) |
 | LinkerTG / UdexReal | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/udexreal` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/udexreal/README.md) |
-| LinkerMCG_G7 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README.md) |
+| LinkerMCG_G7 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | `motion/linkermcg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkermcg/README.md) |
 | LinkerMCG_M7 | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ | - | `motion/linkermcg_m7` | [Protocol](LinkerHand_UDP_M7&M11.md) |
 | LinkerMCG_M11 | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `motion/linkermcg_m11` | [Protocol](LinkerHand_UDP_M7&M11.md) |
 | LinkerEG | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - | - | `motion/linkereg` | [README](src/linkerhand_retarget/linkerhand_retarget/motion/linkereg/README.md) |
@@ -116,7 +116,7 @@ src/linkerhand_retarget/linkerhand_retarget/config/base_config.yml
 | `motion_type` | Data glove type | `linkerforce`, `vtrdyn`, `udexreal`, `udexrealv2t`, `linkermcg_g7`, `linkermcg_m7`, `linkermcg_m11`, `linkereg1`, `linkereg2` (`linkermcg` is a legacy alias of `linkermcg_g7`) |
 | `datasource_type` | Data source type | `motion` |
 | `retargeting_type` | Retargeting type | `projection` |
-| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30` (`o20` is supported by `linkerforce`, `linkermcg_g7`, `linkermcg_m7`, or `linkermcg_m11`; `o30` is supported by `linkerforce`, `linkermcg_g7`, or `linkermcg_m11`) |
+| `robotname_r` | Right hand robot model | `o6`, `l6`, `l7`, `l10`, `l10v7`, `l20`, `l21`, `l25`, `g20`, `o20`, `o30` (`o20` is supported by `linkerforce`, `linkermcg_g7`, `linkermcg_m7`, or `linkermcg_m11`; `o30` is supported by `linkerforce` or `linkermcg_m11`) |
 | `robotname_l` | Left hand robot model | same as above |
 | `motion_device` | Motion device ID, used by selected motion sources | e.g. `eric` |
 
