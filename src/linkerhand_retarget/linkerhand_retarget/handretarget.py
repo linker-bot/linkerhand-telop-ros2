@@ -87,11 +87,11 @@ _script_dir = str(Path(__file__).parent)
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from linkerhand_retarget.linkerhand.utils import *
-from linkerhand_retarget.linkerhand.vtrdyncore import *
-from linkerhand_retarget.linkerhand.handcore import HandCore
-from linkerhand_retarget.linkerhand.config import HandConfig
-from linkerhand_retarget.linkerhand.constants import (
+from linkerhand.utils import *
+from linkerhand.vtrdyncore import *
+from linkerhand.handcore import HandCore
+from linkerhand.config import HandConfig
+from linkerhand.constants import (
     RetargetingType,
     DataSource,
     MotionSource,
