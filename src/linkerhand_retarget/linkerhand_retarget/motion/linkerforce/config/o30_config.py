@@ -1,4 +1,4 @@
-# O30i 手指配置常量
+# O30 手指配置常量
 FINGER_CONFIGS = {
     # 含义解释：
     # robot_idx：URDF关节序列
