@@ -15,8 +15,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.1,
-            'extended_exp_factor': 1
+            'scale_factor': 1,
+            'extended_exp_factor': 10
         }
     },
     'thumb_abduction': {

@@ -53,8 +53,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
-            'extended_exp_factor': 10
+            'scale_factor': 0.8,
+            'extended_exp_factor': 3
         }
     },
     'middle_root_flexion': {
