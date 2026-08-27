@@ -1012,7 +1012,7 @@ class URDF:
         if joint.type in ["revolute", "prismatic", "continuous"]:
             if q is None:
                 # Use internal cfg vector for forward kinematics
-                q = float(self.cfg[self.actuated_dof_indices[self.actuated_joint_names.index(joint.name)]])
+                q = float(np.asarray(self.cfg[self.actuated_dof_indices[self.actuated_joint_names.index(joint.name)]]).item())
 
             if joint.type == "prismatic":
                 matrix = origin @ tra.translation_matrix(q * joint.axis)

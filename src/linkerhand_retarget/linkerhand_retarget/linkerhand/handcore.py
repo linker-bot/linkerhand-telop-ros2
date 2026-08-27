@@ -216,7 +216,8 @@ class HandCore():
             dot_product = np.dot(vecAB, vecBC)
             norm_AB = np.linalg.norm(vecAB)
             norm_BC = np.linalg.norm(vecBC)
-            cos_theta = np.pi - np.arccos(dot_product / (norm_AB * norm_BC))
+            if norm_AB != 0 and norm_BC != 0:
+                cos_theta = np.pi - np.arccos(dot_product / (norm_AB * norm_BC))
             # 中部夹角
             qpos[8 + 5 * i] = cos_theta
 
