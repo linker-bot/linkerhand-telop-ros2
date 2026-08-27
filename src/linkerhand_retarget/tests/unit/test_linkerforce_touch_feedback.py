@@ -95,6 +95,8 @@ def test_touch_callback_caches_force_values_without_serial_write(monkeypatch):
     retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
     retarget.forcelock = lock
     retarget.results = {"left": {}, "right": {}}
+    # __new__ 跳过 __init__，需补齐 process_touch_data 依赖的斜率增益字段（默认 1.0）
+    retarget.force_feedback_slope_gain = 1.0
     retarget.force_reader_right = SimpleNamespace(
         serial_port=serial_port,
         forcelist=[0.0] * 5,
@@ -116,6 +118,8 @@ def test_touch_callback_clamps_negative_force_values_to_zero(monkeypatch):
     retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
     retarget.forcelock = TrackingLock()
     retarget.results = {"left": {}, "right": {}}
+    # __new__ 跳过 __init__，需补齐 process_touch_data 依赖的斜率增益字段（默认 1.0）
+    retarget.force_feedback_slope_gain = 1.0
 
     retarget.process_touch_data(make_touch_payload(-1.0), "right")
 
@@ -282,8 +286,8 @@ def test_touch_subscriptions_run_on_dedicated_node_and_executor(monkeypatch):
     retarget._start_touch_subscription_worker()
 
     assert [item[1] for item in subscriptions] == [
-        "/cb_left_hand_matrix_touch",
-        "/cb_right_hand_matrix_touch",
+        "/cb_left_hand_matrix_touch_mass",
+        "/cb_right_hand_matrix_touch_mass",
     ]
     assert added_nodes == [retarget.touch_node]
     assert len(started_threads) == 1

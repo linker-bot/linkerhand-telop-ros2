@@ -36,6 +36,18 @@ def _install_ros_stubs(monkeypatch):
     monkeypatch.setitem(sys.modules, "std_msgs.msg", std_msgs_msg)
 
 
+def _o30_limits_for(hand_class_name):
+    import linkerhand_retarget.motion.linkerforce.hand.linkerforce_o30 as linkerforce_o30
+
+    if hand_class_name == "LeftHand":
+        return linkerforce_o30.O30_URDF_JOINT_LIMITS_LEFT
+    return linkerforce_o30.O30_URDF_JOINT_LIMITS_RIGHT
+
+
+def _o30_disable_motor_constraints(hand):
+    hand.motor_constraints = [{"enabled": False} for _ in range(20)]
+
+
 class FakeHandCore:
     hand_numjoints_r = 20
     hand_numjoints_l = 20
@@ -127,7 +139,13 @@ def test_o30_control_output_uses_local_urdf_normalization(hand_class_name, monke
     assert tuple(getattr(hand, "topic_joint_names", ())) == O30_EXPECTED_TOPIC_NAMES
     assert hand.g_jointpositions[0] == 0
     assert hand.g_jointpositions[1] == 0
-    assert hand.g_jointpositions[2:6] == [217, 151, 159, 159]
+    # 四个反转 roll 关节（arc 4/8/12/16）在 0 弧度的输出由当前 URDF 限位决定
+    limits = _o30_limits_for(hand_class_name)
+    reversed_zero_outputs = [
+        int(round(255 - (0 - limits[arc_idx][0]) / (limits[arc_idx][1] - limits[arc_idx][0]) * 255))
+        for arc_idx in (4, 8, 12, 16)
+    ]
+    assert hand.g_jointpositions[2:6] == reversed_zero_outputs
     assert hand.g_jointpositions[6:] == [0] * 14
 
 
@@ -137,13 +155,15 @@ def test_o30_local_arc_to_motor_normalizes_urdf_limits(hand_class_name):
 
     hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
+    _o30_disable_motor_constraints(hand)
 
+    # 每个关节输入其 URDF 限位端值（正向关节超上限、反转关节低于下限），
+    # 使 clamp 后恰好到达限位，期望输出满值 255
+    limits = _o30_limits_for(hand_class_name)
+    reversed_indices = (4, 8, 12, 16)
     hand.g_jointpositions_arc = [
-        0.6108, 1.63, 1.51, 1.66,
-        -0.07, 1.77, 1.63, 1.63,
-        -0.26, 1.77, 1.63, 1.63,
-        -0.17, 1.77, 1.63, 1.63,
-        -0.17, 1.77, 1.63, 1.63,
+        limits[i][1] + 0.01 if i not in reversed_indices else limits[i][0] - 0.01
+        for i in range(20)
     ]
     hand._set_g_jointpositions_from_arc()
 
@@ -160,6 +180,7 @@ def test_o30_thumb_rotate_motor_output_uses_physical_direction(hand_class_name):
 
     hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
+    _o30_disable_motor_constraints(hand)
 
     hand.g_jointpositions_arc = [0.0] * 20
     hand.g_jointpositions_arc[0] = 0.0
@@ -167,7 +188,7 @@ def test_o30_thumb_rotate_motor_output_uses_physical_direction(hand_class_name):
     assert hand.g_jointpositions[0] == 0
 
     hand.g_jointpositions_arc = [0.0] * 20
-    hand.g_jointpositions_arc[0] = 0.6108
+    hand.g_jointpositions_arc[0] = _o30_limits_for(hand_class_name)[0][1] + 0.01
     hand._set_g_jointpositions_from_arc()
     assert hand.g_jointpositions[0] == 255
 
@@ -178,12 +199,14 @@ def test_o30_four_finger_roll_outputs_reverse_urdf_limits(hand_class_name):
 
     hand = getattr(linkerforce_o30, hand_class_name)(FakeHandCore())
     hand.smooth_enabled = False
+    _o30_disable_motor_constraints(hand)
 
+    limits = _o30_limits_for(hand_class_name)
     roll_joints = (
-        (4, 2, -0.07, 0.4),
-        (8, 3, -0.26, 0.38),
-        (12, 4, -0.17, 0.28),
-        (16, 5, -0.17, 0.28),
+        (4, 2, limits[4][0], limits[4][1]),
+        (8, 3, limits[8][0], limits[8][1]),
+        (12, 4, limits[12][0], limits[12][1]),
+        (16, 5, limits[16][0], limits[16][1]),
     )
     for arc_idx, motor_idx, lower, upper in roll_joints:
         hand.g_jointpositions_arc = [0.0] * 20
@@ -205,9 +228,10 @@ def test_o30_thumb_mcp_uses_actual_control_output_order(hand_class_name):
     hand.smooth_enabled = False
     hand.motor_constraints = [{"enabled": False} for _ in range(20)]
 
+    limits = _o30_limits_for(hand_class_name)
     hand.g_jointpositions_arc = [0.0] * 20
-    hand.g_jointpositions_arc[0] = 0.6108
-    hand.g_jointpositions_arc[2] = 1.51
+    hand.g_jointpositions_arc[0] = limits[0][1] + 0.01
+    hand.g_jointpositions_arc[2] = limits[2][1] + 0.01
     hand._set_g_jointpositions_from_arc()
 
     assert hand.g_jointpositions[0] == 255
