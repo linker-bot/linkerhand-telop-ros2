@@ -208,8 +208,10 @@ ros2 topic echo /cb_right_hand_control_cmd
 离线单元测试可从仓库根目录运行：
 
 ```bash
-PYTHONPATH=src/linkerhand_retarget python3 -m pytest src/linkerhand_retarget/tests/unit -q
+python3 -m pytest src/linkerhand_retarget/tests/unit -q
 ```
+
+`tests/` 目录提供 `conftest.py`，会自动把包源码目录加入 `sys.path`，无需额外设置 `PYTHONPATH`。
 
 集成测试可能需要真实硬件、串口设备、网络设备或完整 ROS2 运行环境。
 

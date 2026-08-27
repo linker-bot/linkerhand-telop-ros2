@@ -208,8 +208,11 @@ Some modules publish or subscribe to additional topics. See the module documenta
 Offline unit tests can be run from the repository root:
 
 ```bash
-PYTHONPATH=src/linkerhand_retarget python3 -m pytest src/linkerhand_retarget/tests/unit -q
+python3 -m pytest src/linkerhand_retarget/tests/unit -q
 ```
+
+The tests directory provides a `conftest.py` that adds the package source
+directories to `sys.path`, so no `PYTHONPATH` is required.
 
 Integration tests may require hardware, serial devices, network devices, or a full ROS2 runtime setup.
 
