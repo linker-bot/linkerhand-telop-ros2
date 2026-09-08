@@ -403,6 +403,21 @@ class TestFrameHandlerPositionFrames:
         assert "Unknown command: 0x66" in log_text
         assert "frame=5D 66 02 01 02 C8" in log_text
 
+    def test_product_version_frame_decodes_ascii_payload_as_is(self):
+        handler = FrameHandler(HandType.right)
+        product_payload = b"LinkerForce-O30\r\n"
+        frame = array.array(
+            "B",
+            FrameHandler.pack_data(
+                CommandCode.PRODUCT_VERSION_QUERY.value,
+                product_payload,
+            ),
+        )
+
+        assert handler.handle_frame(frame) == {
+            "product_version": product_payload.decode("ascii"),
+        }
+
 
 class TestConstants:
     def test_buffer_size(self):
@@ -420,6 +435,68 @@ class TestConstants:
 
 
 class TestForceSerialReaderVersionQuery:
+    def test_product_version_query_command_is_empty_payload(self):
+        reader = ForceSerialReader(HandType.right)
+
+        assert reader.pack_09_data() == FrameHandler.pack_data(
+            CommandCode.PRODUCT_VERSION_QUERY.value,
+        )
+
+    def test_product_version_query_is_sent_only_for_firmware_313(self, monkeypatch):
+        monkeypatch.setattr(
+            "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
+            lambda _seconds: None,
+        )
+
+        firmware_payload = struct.pack("<IB", 30103, 1)
+        firmware_frame = FrameHandler.pack_data(
+            CommandCode.VERSION_QUERY.value,
+            firmware_payload,
+        )
+        product_frame = FrameHandler.pack_data(
+            CommandCode.PRODUCT_VERSION_QUERY.value,
+            b"LinkerForce-O30",
+        )
+
+        class FakeSerialPort:
+            def __init__(self):
+                self.writes = []
+                self.buffer = bytearray()
+
+            @property
+            def in_waiting(self):
+                return len(self.buffer)
+
+            def write(self, data):
+                self.writes.append(bytes(data))
+                if data == FrameHandler.pack_data(CommandCode.VERSION_QUERY.value):
+                    self.buffer.extend(firmware_frame)
+                elif data == FrameHandler.pack_data(CommandCode.PRODUCT_VERSION_QUERY.value):
+                    self.buffer.extend(product_frame)
+
+            def read(self, size):
+                data = bytes(self.buffer[:size])
+                del self.buffer[:size]
+                return data
+
+            def reset_input_buffer(self):
+                self.buffer.clear()
+
+            def reset_output_buffer(self):
+                pass
+
+        reader = ForceSerialReader(HandType.right)
+        serial_port = FakeSerialPort()
+        reader.serial_port = serial_port
+
+        assert reader.query_version_sync(response_wait=0) is True
+        assert reader.version == "3.1.3"
+        assert reader.product_version == "LinkerForce-O30"
+        assert serial_port.writes == [
+            reader.pack_01_data(),
+            reader.pack_09_data(),
+        ]
+
     def test_position_packet_logging_flag_is_passed_to_frame_handler(self):
         reader = ForceSerialReader(HandType.right, log_position_packets=True)
 

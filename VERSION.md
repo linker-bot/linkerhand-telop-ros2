@@ -10,6 +10,7 @@
 - O30 型号规范化：原 O30i 硬件统一为公开型号 O30，更新模型资源与 URDF 限位，保留客户 LinkerForce 调参（`o30_config.py` 参数值不变）。
 - 修复 handretarget 启动崩溃：统一 `linkerhand` 导入路径，消除同名枚举被加载成双份导致的 LinkerForce 初始化失败（`Retarget` 缺少 `lefthand`）。
 - LinkerForce 输出帧率改为按配置读取，支持通过 `motor_output.frame_rate` 调整运行调度频率。
+- 新增 LinkerForce `0x09` 产品版本查询：仅固件 `3.1.3` 发送查询，响应内容按 ASCII 原样解析。
 - 调整 LinkerForce 触觉反馈：新增斜率增益（`slope_gain`）放大映射，触觉质量话题更新为 `*_matrix_touch_mass`。
 - 修复 UdexReal 启动流程：UDP 初始化失败明确返回失败、成功明确返回成功，避免节点启动后未进入 ROS2 事件循环而直接退出。
 - 测试体系完善：O30/触觉反馈测试适配更新后的模型与 URDF 限位，`tests/conftest.py` 自动配置导入路径（不再依赖手动 `PYTHONPATH`），移除 `linkerforce_improved` 死测试，信号处理测试归位集成目录；完整离线单测全绿。

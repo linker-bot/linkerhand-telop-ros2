@@ -22,6 +22,7 @@ class CommandCode(Enum):
     POSITION_QUERY = 0x03
     FORCE_FEEDBACK = 0x04
     COMPRESSED_POSITION_QUERY = 0x05
+    PRODUCT_VERSION_QUERY = 0x09
     A3_POSITION = 0xA3
     A6_POSITION = 0xA6
     A7_FORCE = 0xA7
@@ -34,6 +35,7 @@ POSITION_QUERY_COMMAND_VALUES = {
 }
 DEFAULT_POSITION_QUERY_COMMAND = CommandCode.POSITION_QUERY.value
 POSITION_QUERY_COMPRESSED_MIN_VERSION = (2, 1, 5)
+PRODUCT_VERSION_QUERY_FIRMWARE = (3, 1, 3)
 
 
 # 协议常量
@@ -350,6 +352,8 @@ class FrameHandler:
 
         if cmd == CommandCode.VERSION_QUERY.value:
             return self._handle_version(frame_data)
+        elif cmd == CommandCode.PRODUCT_VERSION_QUERY.value:
+            return self._handle_product_version(frame_data)
         elif cmd == CommandCode.POSITION_QUERY.value:
             return self._handle_position(frame_data, is_a3=False, frame=frame)
         elif cmd == CommandCode.FORCE_FEEDBACK.value:
@@ -415,6 +419,15 @@ class FrameHandler:
         detected_type = self._get_hand_type(status_code)
         raw_type = self.detect_hand_type(status_code)
         return {'version': version, 'handtype': detected_type, 'raw_handtype': raw_type}
+
+    def _handle_product_version(self, frame_data: array.array) -> Optional[Dict[str, Any]]:
+        try:
+            product_version = bytes(frame_data).decode('ascii')
+        except UnicodeDecodeError as e:
+            if self.logger:
+                self.logger.log('warn', f"Invalid product version ASCII data: {e}")
+            return None
+        return {'product_version': product_version}
 
     def _handle_position(
         self,
@@ -789,6 +802,7 @@ class ForceSerialReader:
         self.connflag = False
         self.position_frame_count = 0
         self._version: Optional[str] = None
+        self.product_version: Optional[str] = None
         self.handtype: Optional[HandType] = None
         self.position_query_command = DEFAULT_POSITION_QUERY_COMMAND
         self._suppress_version_hint = False
@@ -940,6 +954,7 @@ class ForceSerialReader:
         retry_count = max(1, retry_count)
         self.handtype = None
         self.version = None
+        self.product_version = None
         self.connflag = False
         parser = FrameParser()
         previous_suppress_version_hint = self._suppress_version_hint
@@ -959,6 +974,8 @@ class ForceSerialReader:
                 while True:
                     self._poll_serial_frames_once(parser)
                     if self.handtype is not None:
+                        if parse_linkerforce_version(self.version) == PRODUCT_VERSION_QUERY_FIRMWARE:
+                            self._query_product_version_sync(parser, response_wait)
                         return True
                     if time.time() >= deadline:
                         break
@@ -968,6 +985,21 @@ class ForceSerialReader:
             return self.handtype is not None
         finally:
             self._suppress_version_hint = previous_suppress_version_hint
+
+    def _query_product_version_sync(self, parser: FrameParser, response_wait: float) -> bool:
+        if self.product_version is not None:
+            return True
+        if not self._write_serial(self.pack_09_data()):
+            return False
+
+        deadline = time.time() + response_wait
+        while True:
+            self._poll_serial_frames_once(parser)
+            if self.product_version is not None:
+                return True
+            if time.time() >= deadline:
+                return False
+            time.sleep(READ_INTERVAL)
 
     def query_serial_port(
         self,
@@ -1059,6 +1091,9 @@ class ForceSerialReader:
         if result:
             if 'version' in result:
                 self.version = result['version']
+            if 'product_version' in result:
+                self.product_version = result['product_version']
+                self._log('info', f"LinkerForce 产品版本: {self.product_version}")
             if 'raw_handtype' in result:
                 self.handtype = result['raw_handtype']
             elif 'handtype' in result:
@@ -1096,6 +1131,9 @@ class ForceSerialReader:
 
     def pack_01_data(self) -> bytes:
         return self._handler.pack_version_query()
+
+    def pack_09_data(self) -> bytes:
+        return FrameHandler.pack_data(CommandCode.PRODUCT_VERSION_QUERY.value)
 
     def pack_02_data(self, mastersendflag: int) -> bytes:
         payload = struct.pack('BBBBB', mastersendflag, 0, 0, 0, 0)
