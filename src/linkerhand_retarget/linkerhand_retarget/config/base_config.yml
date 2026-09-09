@@ -1,6 +1,6 @@
 calibration:
   fist_extend_ratio: 0.5
-  show_fist: false
+  show_fist: true
 debug:
   joint_motor_debug_l: true
   joint_motor_debug_r: true
@@ -62,8 +62,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: o6
-  robotname_r: o6
+  robotname_l: o30
+  robotname_r: o30
   sapientype: left
   usecan: false
   usegui: false
