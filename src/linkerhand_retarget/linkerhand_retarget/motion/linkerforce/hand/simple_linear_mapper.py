@@ -1,9 +1,110 @@
 import copy
+import importlib
+import re
 from typing import Dict, List, Sequence
 
 import numpy as np
 
 from linkerhand.filter import MultiChannelKalmanFilter
+
+
+def resolve_linkerforce_product(product_type, firmware_version):
+    """Return the configured product family and mapping generation."""
+    product_text = str(product_type or "").strip(" \t\r\n\x00").upper()
+    if product_text.startswith("LFFG2"):
+        version_key = "v1" if product_text.endswith("V01") else "v2"
+        return "LFFG2", version_key
+
+    firmware_text = str(firmware_version or "").strip().lower()
+    match = re.match(r"^v?([123])(?:\.|$)", firmware_text)
+    if match:
+        version_key = "v1" if match.group(1) in ("1", "3") else "v2"
+    else:
+        version_key = "v2"
+    return "LFFG1", version_key
+
+
+def load_linkerforce_config(model_name, product_type, firmware_version):
+    """Load one model configuration from its detected product-family directory."""
+    family, _ = resolve_linkerforce_product(product_type, firmware_version)
+    linkerforce_package = __package__.rsplit(".hand", 1)[0]
+    return importlib.import_module(
+        f"{linkerforce_package}.config.{family.lower()}.{model_name}_config"
+    )
+
+
+def _select_version_value(value, version_key):
+    if not isinstance(value, dict):
+        return copy.deepcopy(value)
+
+    return copy.deepcopy(value.get(version_key, value.get("v2", value)))
+
+
+def resolve_linkerforce_finger_configs(configs, product_type, firmware_version):
+    """Reduce flat v1/v2 fields from one product-family config module."""
+    _, version_key = resolve_linkerforce_product(product_type, firmware_version)
+    resolved = copy.deepcopy(configs)
+    for config in resolved.values():
+        for field_name in ("weights", "reverse_motion"):
+            if field_name in config:
+                config[field_name] = _select_version_value(
+                    config[field_name], version_key
+                )
+    return resolved
+
+
+def resolve_linkerforce_motor_constraints(
+    constraints, hand_side, product_type, firmware_version
+):
+    """Return a copied left/right motor constraint list from one family module."""
+    side_constraints = constraints.get(hand_side, [])
+    return copy.deepcopy(side_constraints)
+
+
+def update_linkerforce_mapper_config(mapper, finger_configs):
+    """Replace resolved mapper data and rebuild its derived mapping settings."""
+    mapper.finger_configs = copy.deepcopy(finger_configs)
+    if hasattr(mapper, "dynamic_weight_configs"):
+        mapper.dynamic_weight_configs = {}
+    if hasattr(mapper, "extended_mapping_enabled"):
+        mapper.extended_mapping_enabled = {}
+    if hasattr(mapper, "scale_factors"):
+        mapper.scale_factors = {}
+    if hasattr(mapper, "exp_factors"):
+        mapper.exp_factors = {}
+    initializer = getattr(mapper, "_init_extended_mapping_from_config", None)
+    if initializer is not None:
+        initializer()
+
+
+def apply_linkerforce_product_config(
+    hand, model_name, hand_side, product_type, firmware_version
+):
+    """Apply the detected product-family config to an initialized hand instance."""
+    family, version_key = resolve_linkerforce_product(product_type, firmware_version)
+    config_module = load_linkerforce_config(
+        model_name, product_type, firmware_version
+    )
+    hand.product_type = product_type
+    hand.product_family = family
+    hand.glove_version = version_key
+    hand.product_config_module = config_module
+    update_linkerforce_mapper_config(
+        hand.multi_state_mapper,
+        resolve_linkerforce_finger_configs(
+            config_module.FINGER_CONFIGS, product_type, firmware_version
+        ),
+    )
+    hand.motor_constraints = resolve_linkerforce_motor_constraints(
+        config_module.MOTOR_CONSTRAINTS, hand_side, product_type, firmware_version
+    )
+    set_dynamic_weight_config = getattr(
+        hand.multi_state_mapper, "set_dynamic_weight_config", None
+    )
+    if callable(set_dynamic_weight_config):
+        for config_name, config in config_module.FINGER_CONFIGS.items():
+            if config.get("dynamic_weight"):
+                set_dynamic_weight_config(config_name, config["dynamic_weight"])
 
 
 class SimpleLinearMapper:

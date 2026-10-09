@@ -9,8 +9,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from linkerhand.handcore import HandCore
 from linkerhand.calibration_checklist import normalize_calibration_filter_config
-from ..config.o30_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
+from ..config.lffg1.o30_config import FINGER_CONFIGS, MAPPING_ORDER, ROBOT_OPOSE_RIGHT, ROBOT_OPOSE_LEFT, ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT, ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT, MULTI_SEGMENT_CONFIG_FROZEN, MOTOR_CONSTRAINTS, CALIBRATION_FILTER_CONFIG
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper
+from .simple_linear_mapper import (
+    apply_linkerforce_product_config,
+    resolve_linkerforce_finger_configs,
+    resolve_linkerforce_motor_constraints,
+)
 
 O30_MUJOCO_JOINT_ARC_INDICES = (
     0, 1, 2, 3,
@@ -20,6 +25,13 @@ O30_MUJOCO_JOINT_ARC_INDICES = (
     16, 17, 18, 18,
 )
 O30_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(O30_MUJOCO_JOINT_ARC_INDICES)
+O30_FALLBACK_ARC_QPOS_INDICES = (
+    16, 17, 18, 19,
+    0, 1, 2, 2,
+    8, 9, 10, 10,
+    12, 13, 14, 14,
+    4, 5, 6, 6,
+)
 
 O30_TOPIC_JOINT_NAMES = (
     "拇指横滚",
@@ -58,7 +70,8 @@ O30_MOTOR_ROBOT_INDICES = (
     3, 7, 11, 15, 19,
 )
 O30_MOTOR_ARC_INDICES = O30_MOTOR_ROBOT_INDICES
-O30_REVERSED_MOTOR_ROBOT_INDICES = {4, 8, 12, 16}
+# O30 实物四指侧摆的正方向均对应电机值递增。
+O30_REVERSED_MOTOR_ROBOT_INDICES = set()
 
 
 def _clamp(value, lower, upper):
@@ -162,6 +175,13 @@ def _apply_o30_arc_values(qpos, arc_storage, arc_value):
     arc_storage[19] = arc_value[18]
 
 
+def _sync_o30_fallback_arcs(qpos, arc_storage, hand):
+    limits = O30_URDF_JOINT_LIMITS_LEFT if hand == "left" else O30_URDF_JOINT_LIMITS_RIGHT
+    for arc_idx, qpos_idx in enumerate(O30_FALLBACK_ARC_QPOS_INDICES):
+        lower, upper = limits[arc_idx]
+        arc_storage[arc_idx] = _clamp(qpos[qpos_idx], lower, upper)
+
+
 def _map_piecewise_linear(value, source_open, source_opose, source_fist,
                           target_open, target_opose, target_fist):
     def interpolate(x0, y0, x1, y1):
@@ -206,13 +226,7 @@ def _resolve_version_config(configs: dict, version: str) -> dict:
     """
     解析版本配置，将字典格式的 weights/reverse_motion 转换为具体值
     """
-    resolved = copy.deepcopy(configs)
-    for finger_name, config in resolved.items():
-        if 'weights' in config and isinstance(config['weights'], dict):
-            config['weights'] = config['weights'].get(version, config['weights'].get('v2', [0.5, 0, 0.5]))
-        if 'reverse_motion' in config and isinstance(config['reverse_motion'], dict):
-            config['reverse_motion'] = config['reverse_motion'].get(version, config['reverse_motion'].get('v2', False))
-    return resolved
+    return resolve_linkerforce_finger_configs(configs, None, version)
 
 
 class O30StableDynamicWeightMultiStateLinearMapper(DynamicWeightMultiStateLinearMapper):
@@ -265,7 +279,19 @@ class O30StableDynamicWeightMultiStateLinearMapper(DynamicWeightMultiStateLinear
 
         return robot_angles
 
-class RightHand:
+class _O30FallbackMixin:
+    def _fallback_thumb_yaw(self, joint_arc):
+        if self._fallback_thumb_yaw_origin is None:
+            # No calibration: treat the first glove frame as the yaw zero point.
+            self._fallback_thumb_yaw_origin = joint_arc[1]
+        direction = 1 if self.hand_side == "right" else -1
+        return (joint_arc[1] - self._fallback_thumb_yaw_origin) * 2.5 * direction
+
+    def _sync_fallback_arcs(self, qpos):
+        _sync_o30_fallback_arcs(qpos, self.g_jointpositions_arc, self.hand_side)
+
+
+class RightHand(_O30FallbackMixin):
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
         self.hand_side = "right"
@@ -282,7 +308,10 @@ class RightHand:
         self.calibrationoriginal = None    # 五指张开标定值 (对应255)
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
+        self._fallback_thumb_yaw_origin = None
         self.glove_version = 'v2'
+        self.product_type = None
+        self.product_family = 'LFFG1'
         self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
 
         # ========== 平滑滤波参数 ==========
@@ -317,7 +346,9 @@ class RightHand:
             if config.get('dynamic_weight'):
                 self.multi_state_mapper.set_dynamic_weight_config(config_name, config['dynamic_weight'])
 
-        self.motor_constraints = MOTOR_CONSTRAINTS['right']
+        self.motor_constraints = resolve_linkerforce_motor_constraints(
+            MOTOR_CONSTRAINTS, 'right', None, self.glove_version
+        )
 
     def _apply_motor_constraints(self):
         for i, constraint in enumerate(self.motor_constraints):
@@ -335,25 +366,17 @@ class RightHand:
         return self.g_jointpositions
 
     def set_glove_version(self, version: str):
-        if not version:
-            return
+        if version:
+            self.set_product_version(self.product_type, version)
 
-        major_version = version.split('.')[0]
-        version_key = f'v{major_version}'
-
-        if version_key == self.glove_version:
-            return
-
-        self.glove_version = version_key
-
-        for finger_name, config in FINGER_CONFIGS.items():
-            if 'weights' in config and isinstance(config['weights'], dict):
-                if version_key in config['weights']:
-                    self.multi_state_mapper.finger_configs[finger_name]['weights'] = config['weights'][version_key]
-
-            if 'reverse_motion' in config and isinstance(config['reverse_motion'], dict):
-                if version_key in config['reverse_motion']:
-                    self.multi_state_mapper.finger_configs[finger_name]['reverse_motion'] = config['reverse_motion'][version_key]
+    def set_product_version(self, product_type: str, firmware_version: str):
+        apply_linkerforce_product_config(
+            self,
+            "o30",
+            'right',
+            product_type,
+            firmware_version,
+        )
 
     def initialize_mapper(self) -> bool:
         """
@@ -455,7 +478,7 @@ class RightHand:
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2
-            qpos[17] = joint_arc[2] * -2.5
+            qpos[17] = self._fallback_thumb_yaw(joint_arc)
             qpos[1] = joint_arc[6] * 0.1 + joint_arc[8] * 0.7
             qpos[9] = joint_arc[10] * 0.1 + joint_arc[12] * 0.7
             qpos[13] = joint_arc[14] * 0.1 + joint_arc[16] * 0.7
@@ -465,6 +488,7 @@ class RightHand:
         if arc_value is not None:
             self._set_g_jointpositions_from_arc()
         else:
+            self._sync_fallback_arcs(qpos)
             self._set_g_jointpositions_from_qpos(qpos)
         self._apply_motor_constraints()
         self.g_jointpositions = self._apply_smooth(self.g_jointpositions)
@@ -518,7 +542,7 @@ class RightHand:
             self.last_jointpositions[i] = self.g_jointpositions[i]
 
 
-class LeftHand:
+class LeftHand(_O30FallbackMixin):
     def __init__(self, handcore: HandCore, length=20, is_debug: bool = False):
         self.handcore = handcore
         self.hand_side = "left"
@@ -535,7 +559,10 @@ class LeftHand:
         self.calibrationoriginal = None
         self.calibrationfistpose = None
         self.calibrationopose = None
+        self._fallback_thumb_yaw_origin = None
         self.glove_version = 'v2'
+        self.product_type = None
+        self.product_family = 'LFFG1'
         self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
 
         self.smooth_enabled = True
@@ -560,7 +587,9 @@ class LeftHand:
             if config.get('dynamic_weight'):
                 self.multi_state_mapper.set_dynamic_weight_config(config_name, config['dynamic_weight'])
 
-        self.motor_constraints = MOTOR_CONSTRAINTS['left']
+        self.motor_constraints = resolve_linkerforce_motor_constraints(
+            MOTOR_CONSTRAINTS, 'left', None, self.glove_version
+        )
 
     def _apply_motor_constraints(self):
         for i, constraint in enumerate(self.motor_constraints):
@@ -578,25 +607,17 @@ class LeftHand:
         return self.g_jointpositions
 
     def set_glove_version(self, version: str):
-        if not version:
-            return
+        if version:
+            self.set_product_version(self.product_type, version)
 
-        major_version = version.split('.')[0]
-        version_key = f'v{major_version}'
-
-        if version_key == self.glove_version:
-            return
-
-        self.glove_version = version_key
-
-        for finger_name, config in FINGER_CONFIGS.items():
-            if 'weights' in config and isinstance(config['weights'], dict):
-                if version_key in config['weights']:
-                    self.multi_state_mapper.finger_configs[finger_name]['weights'] = config['weights'][version_key]
-
-            if 'reverse_motion' in config and isinstance(config['reverse_motion'], dict):
-                if version_key in config['reverse_motion']:
-                    self.multi_state_mapper.finger_configs[finger_name]['reverse_motion'] = config['reverse_motion'][version_key]
+    def set_product_version(self, product_type: str, firmware_version: str):
+        apply_linkerforce_product_config(
+            self,
+            "o30",
+            'left',
+            product_type,
+            firmware_version,
+        )
 
     def initialize_mapper(self) -> bool:
         """
@@ -707,7 +728,7 @@ class LeftHand:
         else:
             # 手动映射备用
             qpos[20] = joint_arc[4] * 2.2
-            qpos[17] = joint_arc[2] * -2.5
+            qpos[17] = self._fallback_thumb_yaw(joint_arc)
             qpos[1] = joint_arc[6] * 0.1 + joint_arc[8] * 0.7
             qpos[9] = joint_arc[10] * 0.1 + joint_arc[12] * 0.7
             qpos[13] = joint_arc[14] * 0.1 + joint_arc[16] * 0.7
@@ -716,6 +737,7 @@ class LeftHand:
         if arc_value is not None:
             self._set_g_jointpositions_from_arc()
         else:
+            self._sync_fallback_arcs(qpos)
             self._set_g_jointpositions_from_qpos(qpos)
 
         # print(qpos[4],arc_value[17],self.g_jointpositions[9])

@@ -68,6 +68,7 @@ MOTOR_OUTPUT_RUNTIME_CONFIG_MODULES = {
     RobotName.l20: "l20_config",
     RobotName.o20: "o20_config",
     RobotName.o30: "o30_config",
+    RobotName.l30: "l30_config",
     RobotName.l25: "g20_config",
     RobotName.g20: "g20_config",
 }
@@ -490,6 +491,34 @@ class Retarget():
         serial_port.write(data)
         return True
 
+    def _apply_reader_product_config(self, hand, reader):
+        """Apply firmware and optional 0x09 product data to one hand mapper."""
+        if hand is None or reader is None:
+            return
+
+        firmware_version = getattr(reader, "version", None)
+        product_type = getattr(reader, "product_version", None)
+        set_product_version = getattr(hand, "set_product_version", None)
+        if callable(set_product_version):
+            set_product_version(product_type, firmware_version)
+            return
+
+        # Keep compatibility with hand implementations from older deployments.
+        set_glove_version = getattr(hand, "set_glove_version", None)
+        if callable(set_glove_version) and firmware_version:
+            set_glove_version(firmware_version)
+
+    def _log_glove_version(self, hand_name, reader):
+        version = getattr(reader, "version", None)
+        if not version:
+            return
+
+        product_version = getattr(reader, "product_version", None) or "Null"
+        self.node.get_logger().info(
+            f"[手套版本] {hand_name}: v{str(version).split('.')[0]} ({version}), "
+            f"产品型号: {product_version}"
+        )
+
     def _capture_o6_right_pinky_raw_jump(self, right_positions, left_valid=False, right_valid=True):
         if not getattr(self, "debug_enabled", False) or getattr(self.righthandtype, "name", self.righthandtype) != "o6":
             return None
@@ -789,7 +818,12 @@ class Retarget():
                 try:
                     if temp_reader.openserial(port=port, baudrate=baudrate):
                         if temp_reader.query_version_sync(log_version_hint=False):
-                            detected_ports[port] = (temp_reader.handtype, baudrate, temp_reader.version)
+                            detected_ports[port] = (
+                                temp_reader.handtype,
+                                baudrate,
+                                temp_reader.version,
+                                getattr(temp_reader, "product_version", None),
+                            )
                             self.node.get_logger().info(f"检测到 {port}: {temp_reader.handtype} @ {baudrate}")
                             detected = True
 
@@ -804,7 +838,7 @@ class Retarget():
                 self.node.get_logger().warn(f"端口 {port} 未能识别设备类型")
         
         # 根据检测到的手型初始化
-        for port, (handtype, baudrate, version) in detected_ports.items():
+        for port, (handtype, baudrate, version, product_version) in detected_ports.items():
             if handtype == 'Left' and not left_found:
                 self.force_reader_left = ForceSerialReader(
                     HandType.left,
@@ -817,15 +851,15 @@ class Retarget():
                 if self.force_reader_left.openserial(port=port, baudrate=baudrate):
                     self.force_reader_left.handtype = handtype
                     self.force_reader_left.version = version
+                    self.force_reader_left.product_version = product_version
                     self.force_reader_left.start()
                     self._write_reader_packet(self.force_reader_left, self.force_reader_left.pack_01_data())
                     self.leftport = port
                     self.leftbaudrate = baudrate
                     left_found = True
                     self.node.get_logger().info(f"左手已连接: {port} @ {baudrate}, 版本 {version}")
-                    if version:
-                        self.lefthand.set_glove_version(version)
-                        self.node.get_logger().info(f"[手套版本] 左手: v{version.split('.')[0]} ({version})")
+                    self._apply_reader_product_config(self.lefthand, self.force_reader_left)
+                    self._log_glove_version("左手", self.force_reader_left)
                     
             elif handtype == 'Right' and not right_found:
                 self.force_reader_right = ForceSerialReader(
@@ -839,15 +873,15 @@ class Retarget():
                 if self.force_reader_right.openserial(port=port, baudrate=baudrate):
                     self.force_reader_right.handtype = handtype
                     self.force_reader_right.version = version
+                    self.force_reader_right.product_version = product_version
                     self.force_reader_right.start()
                     self._write_reader_packet(self.force_reader_right, self.force_reader_right.pack_01_data())
                     self.rightport = port
                     self.rightbaudrate = baudrate
                     right_found = True
                     self.node.get_logger().info(f"右手已连接: {port} @ {baudrate}, 版本 {version}")
-                    if version:
-                        self.righthand.set_glove_version(version)
-                        self.node.get_logger().info(f"[手套版本] 右手: v{version.split('.')[0]} ({version})")
+                    self._apply_reader_product_config(self.righthand, self.force_reader_right)
+                    self._log_glove_version("右手", self.force_reader_right)
         
         # 初始化未找到的 reader（占位）
         if not left_found:
@@ -874,15 +908,13 @@ class Retarget():
                         if hand_type == 'Left':
                             self.leftport = saved_port
                             self.leftbaudrate = int(saved_baudrate)
-                            if reader.version:
-                                self.lefthand.set_glove_version(reader.version)
-                                self.node.get_logger().info(f"[手套版本] 左手: v{reader.version.split('.')[0]} ({reader.version})")
+                            self._apply_reader_product_config(self.lefthand, reader)
+                            self._log_glove_version("左手", reader)
                         else:
                             self.rightport = saved_port
                             self.rightbaudrate = int(saved_baudrate)
-                            if reader.version:
-                                self.righthand.set_glove_version(reader.version)
-                                self.node.get_logger().info(f"[手套版本] 右手: v{reader.version.split('.')[0]} ({reader.version})")
+                            self._apply_reader_product_config(self.righthand, reader)
+                            self._log_glove_version("右手", reader)
                         found = True
                     else:
                         reader.stop()
@@ -903,15 +935,13 @@ class Retarget():
                             if hand_type == 'Left':
                                 self.leftport = port
                                 self.leftbaudrate = baudrate
-                                if reader.version:
-                                    self.lefthand.set_glove_version(reader.version)
-                                    self.node.get_logger().info(f"[手套版本] 左手: v{reader.version.split('.')[0]} ({reader.version})")
+                                self._apply_reader_product_config(self.lefthand, reader)
+                                self._log_glove_version("左手", reader)
                             else:
                                 self.rightport = port
                                 self.rightbaudrate = baudrate
-                                if reader.version:
-                                    self.righthand.set_glove_version(reader.version)
-                                    self.node.get_logger().info(f"[手套版本] 右手: v{reader.version.split('.')[0]} ({reader.version})")
+                                self._apply_reader_product_config(self.righthand, reader)
+                                self._log_glove_version("右手", reader)
                             found = True
                         else:
                             reader.stop()
@@ -1090,7 +1120,7 @@ class Retarget():
 
         try:
             module = importlib.import_module(
-                f".config.{config_module_name}",
+                f".config.lffg1.{config_module_name}",
                 package=__package__,
             )
         except ImportError:

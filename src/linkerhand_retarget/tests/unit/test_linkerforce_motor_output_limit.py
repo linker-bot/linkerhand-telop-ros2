@@ -265,7 +265,7 @@ def test_base_config_defines_motor_output_limit_debug_switch():
 @pytest.mark.parametrize("module_name", MODEL_CONFIG_MODULES)
 def test_model_config_does_not_define_output_runtime_limits(module_name):
     module = importlib.import_module(
-        f"linkerhand_retarget.motion.linkerforce.config.{module_name}"
+        f"linkerhand_retarget.motion.linkerforce.config.lffg1.{module_name}"
     )
     assert not hasattr(module, "OUTPUT_RUNTIME_LIMITS")
     assert not hasattr(module, "MOTOR_OUTPUT_RUNTIME_LIMITS")
@@ -291,6 +291,62 @@ def test_base_config_output_runtime_limits_expand_to_motor_count():
         for _ in range(6)
     ]
     assert runtime_limits[0] is not runtime_limits[1]
+
+
+def test_l30_runtime_limits_use_lffg1_config_output_count():
+    retarget = Retarget.__new__(Retarget)
+    retarget.baseconfig = {
+        "motor_output": {
+            "OUTPUT_RUNTIME_LIMITS": {
+                "max_runtime_ms": 300.0,
+            }
+        }
+    }
+
+    runtime_limits = retarget._load_motor_output_runtime_limits(
+        retarget_module.RobotName.l30
+    )
+
+    assert len(runtime_limits) == 18
+
+
+def test_reader_product_version_is_forwarded_to_new_hand_api():
+    retarget = Retarget.__new__(Retarget)
+    calls = []
+    hand = SimpleNamespace(
+        set_product_version=lambda product, firmware: calls.append((product, firmware)),
+        set_glove_version=lambda firmware: calls.append(("legacy", firmware)),
+    )
+    reader = SimpleNamespace(
+        product_version="LFFG2-G20-V01",
+        version="3.1.3",
+    )
+
+    retarget._apply_reader_product_config(hand, reader)
+
+    assert calls == [("LFFG2-G20-V01", "3.1.3")]
+
+
+@pytest.mark.parametrize(
+    ("product_version", "expected"),
+    [
+        (None, "[手套版本] 左手: v3 (3.1.2), 产品型号: Null"),
+        ("LinkerForce-O30", "[手套版本] 左手: v3 (3.1.3), 产品型号: LinkerForce-O30"),
+    ],
+)
+def test_glove_version_log_includes_product_model_or_null(product_version, expected):
+    retarget = Retarget.__new__(Retarget)
+    logs = []
+    retarget.node = SimpleNamespace(
+        get_logger=lambda: SimpleNamespace(info=logs.append),
+    )
+    reader = SimpleNamespace(version="3.1.2", product_version=product_version)
+    if product_version:
+        reader.version = "3.1.3"
+
+    retarget._log_glove_version("左手", reader)
+
+    assert logs == [expected]
 
 
 def test_missing_output_runtime_limits_default_to_300_ms():

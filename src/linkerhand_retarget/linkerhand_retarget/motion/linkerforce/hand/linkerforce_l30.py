@@ -1,81 +1,48 @@
+"""LinkerForce L30 mapping and output adaptation.
+
+The L30 output protocol is different from O30.  The calibrated mapper
+algorithm is shared with O30, but all L30 mapping, pose, and constraint data
+is defined here so that L30 does not inherit O30 tuning by accident.
 """
-LinkerForce L30 手型映射模块 - ROS2版本
-占位实现：复用 O30 的标定 mapper，按 L30 固件输出顺序生成 18 位 motor 表。
-"""
+import copy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from linkerhand.calibration_checklist import normalize_calibration_filter_config
+
+from ..config.lffg1.l30_config import (
+    CALIBRATION_FILTER_CONFIG,
+    FINGER_CONFIGS,
+    L30_MOTOR_ARC_INDICES,
+    L30_MOTOR_DEFAULTS,
+    L30_MOTOR_QPOS_INDICES,
+    L30_MOTOR_TARGET_LIMITS,
+    L30_MOTOR_URDF_INDICES,
+    L30_MUJOCO_JOINT_ARC_INDICES,
+    L30_MUJOCO_JOINT_ARC_SIGNS,
+    L30_ROBOT_FIST_LEFT,
+    L30_ROBOT_FIST_RIGHT,
+    L30_ROBOT_OPOSE_LEFT,
+    L30_ROBOT_OPOSE_RIGHT,
+    L30_ROBOT_ORIGINAL_LEFT,
+    L30_ROBOT_ORIGINAL_RIGHT,
+    L30_TOPIC_JOINT_NAMES,
+    MAPPING_ORDER,
+    MOTOR_CONSTRAINTS,
+    MULTI_SEGMENT_CONFIG_FROZEN,
+)
 from .linkerforce_o30 import (
+    O30StableDynamicWeightMultiStateLinearMapper as _L30StableMapper,
     LeftHand as _O30LeftHand,
     RightHand as _O30RightHand,
 )
+from .simple_linear_mapper import (
+    apply_linkerforce_product_config,
+    load_linkerforce_config,
+    resolve_linkerforce_finger_configs,
+    resolve_linkerforce_motor_constraints,
+)
 
-L30_TOPIC_JOINT_NAMES = (
-    "拇指指根",
-    "拇指指尖",
-    "拇指侧摆",
-    "拇指旋转",
-    "无名指侧摆",
-    "无名指指尖",
-    "无名指指根",
-    "中指指根",
-    "中指指尖",
-    "小指指根",
-    "小指指尖",
-    "小指侧摆",
-    "中指侧摆",
-    "食指侧摆",
-    "食指指根",
-    "食指指尖",
-    "手腕",
-    "未使用17",
-)
-L30_MOTOR_QPOS_INDICES = (
-    0, 19, 1, 18,
-    5, 14, 4,
-    12, 10,
-    17, 6, 16,
-    13, 9,
-    8, 2,
-    None, None,
-)
-L30_MOTOR_ARC_INDICES = (
-    2, 3, 1, 0,
-    12, 14, 13,
-    9, 10,
-    17, 18, 16,
-    8, 4,
-    5, 6,
-    None, None,
-)
-L30_MOTOR_URDF_INDICES = (
-    19, 20, 17, 18,
-    5, 7, 6,
-    10, 11,
-    2, 3, 1,
-    9, 13,
-    14, 15,
-    0, None,
-)
-L30_MOTOR_TARGET_LIMITS = (
-    (0, 1000), (0, 1500), (0, 1000), (0, 900),
-    (-200, 200), (0, 1500), (0, 1600),
-    (0, 1600), (0, 1500),
-    (0, 1600), (0, 1500), (-200, 200),
-    (-200, 200), (-200, 200),
-    (0, 1600), (0, 1500),
-    (-1000, 1000), None,
-)
-L30_MOTOR_DEFAULTS = tuple(0 for _ in L30_MOTOR_TARGET_LIMITS)
-L30_MUJOCO_JOINT_ARC_INDICES = (
-    None,
-    16, 17, 18, 18,
-    12, 13, 14, 14,
-    8, 9, 10, 10,
-    4, 5, 6, 6,
-    1, 0, 2, 3,
-)
-L30_MUJOCO_JOINT_ARC_SIGNS = (1.0,) * len(L30_MUJOCO_JOINT_ARC_INDICES)
 
 
 def _clamp(value, lower, upper):
@@ -143,9 +110,26 @@ def _map_l30_arc_to_motor(arc_values, hand: str):
     return _map_l30_values_to_motor(arc_values, L30_MOTOR_ARC_INDICES, hand)
 
 
-class _L30PlaceholderHandMixin:
-    def _configure_l30_placeholder(self):
+class _L30HandMixin:
+    @staticmethod
+    def _fallback_thumb_yaw(joint_arc):
+        return joint_arc[2] * -2.5
+
+    @staticmethod
+    def _sync_fallback_arcs(_qpos):
+        pass
+
+    def _configure_l30(self, is_debug: bool):
         output_length = len(L30_MOTOR_TARGET_LIMITS)
+        self.product_type = None
+        self.product_family = "LFFG1"
+        self.glove_version = "v2"
+        self.product_config_module = load_linkerforce_config(
+            "l30", self.product_type, self.glove_version
+        )
+        self.calibration_filter_config = normalize_calibration_filter_config(
+            CALIBRATION_FILTER_CONFIG
+        )
         self.g_jointpositions = list(L30_MOTOR_DEFAULTS)
         self.topic_joint_names = L30_TOPIC_JOINT_NAMES
         self.g_jointvelocity = [255] * output_length
@@ -153,11 +137,63 @@ class _L30PlaceholderHandMixin:
         self.last_jointvelocity = [255] * output_length
         self.handstate = [0] * output_length
         self.smooth_positions = [float(value) for value in self.g_jointpositions]
-        self.motor_constraints = [{"enabled": False} for _ in range(output_length)]
         self.mujoco_joint_arc_indices = L30_MUJOCO_JOINT_ARC_INDICES
         self.mujoco_joint_arc_signs = L30_MUJOCO_JOINT_ARC_SIGNS
         self.mujoco_joint_arc_remaps = (None,) * len(L30_MUJOCO_JOINT_ARC_INDICES)
         self.mujoco_joint_arc_mirrors = (None,) * len(L30_MUJOCO_JOINT_ARC_INDICES)
+
+        if self.hand_side == "left":
+            self.robot_original = copy.deepcopy(L30_ROBOT_ORIGINAL_LEFT)
+            self.robot_opose = copy.deepcopy(L30_ROBOT_OPOSE_LEFT)
+            self.robot_fist = copy.deepcopy(L30_ROBOT_FIST_LEFT)
+        else:
+            self.robot_original = copy.deepcopy(L30_ROBOT_ORIGINAL_RIGHT)
+            self.robot_opose = copy.deepcopy(L30_ROBOT_OPOSE_RIGHT)
+            self.robot_fist = copy.deepcopy(L30_ROBOT_FIST_RIGHT)
+
+        self.multi_state_mapper = _L30StableMapper(
+            resolve_linkerforce_finger_configs(FINGER_CONFIGS, None, self.glove_version),
+            MAPPING_ORDER,
+            is_debug=is_debug,
+        )
+        self.motor_constraints = resolve_linkerforce_motor_constraints(
+            MOTOR_CONSTRAINTS,
+            self.hand_side,
+            self.product_type,
+            self.glove_version,
+        )
+
+    def set_glove_version(self, version: str):
+        if version:
+            self.set_product_version(self.product_type, version)
+
+    def set_product_version(self, product_type: str, firmware_version: str):
+        apply_linkerforce_product_config(
+            self,
+            "l30",
+            self.hand_side,
+            product_type,
+            firmware_version,
+        )
+
+    def initialize_mapper(self) -> bool:
+        self.multi_state_mapper.add_state(
+            "original",
+            self._to_list(self.calibrationoriginal),
+            self.robot_original,
+        )
+        self.multi_state_mapper.add_state(
+            "opose",
+            self._to_list(self.calibrationopose),
+            self.robot_opose,
+        )
+        self.multi_state_mapper.add_state(
+            "fist",
+            self._to_list(self.calibrationfistpose),
+            self.robot_fist,
+        )
+        self.multi_state_mapper.set_state_order(list(MULTI_SEGMENT_CONFIG_FROZEN))
+        return True
 
     def _apply_motor_constraints(self):
         for i, constraint in enumerate(self.motor_constraints[: len(self.g_jointpositions)]):
@@ -175,15 +211,15 @@ class _L30PlaceholderHandMixin:
         return self.g_jointpositions
 
 
-class RightHand(_L30PlaceholderHandMixin, _O30RightHand):
+class RightHand(_L30HandMixin, _O30RightHand):
     def __init__(self, handcore, length=18, is_debug: bool = False):
         _ = length
         super().__init__(handcore, length=20, is_debug=is_debug)
-        self._configure_l30_placeholder()
+        self._configure_l30(is_debug)
 
 
-class LeftHand(_L30PlaceholderHandMixin, _O30LeftHand):
+class LeftHand(_L30HandMixin, _O30LeftHand):
     def __init__(self, handcore, length=18, is_debug: bool = False):
         _ = length
         super().__init__(handcore, length=20, is_debug=is_debug)
-        self._configure_l30_placeholder()
+        self._configure_l30(is_debug)

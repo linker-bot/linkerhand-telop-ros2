@@ -277,7 +277,7 @@ class TestRobotNameMap:
         assert handcore.last_qpos_l == qpos
 
     def test_o20_thumb_rotate_uses_o20_joint_range(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
             ROBOT_OPOSE_LEFT,
@@ -311,7 +311,7 @@ class TestRobotNameMap:
             assert lower <= fist[0] <= upper
 
     def test_o20_thumb_cmc_roll_open_and_fist_are_valid_urdf_targets(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
             ROBOT_ORIGINAL_LEFT,
@@ -341,7 +341,7 @@ class TestRobotNameMap:
             assert lower <= fist[0] <= upper
 
     def test_o20_open_and_fist_pose_presets_match_motor_extremes(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
             ROBOT_ORIGINAL_LEFT,
@@ -377,7 +377,7 @@ class TestRobotNameMap:
                 assert lower <= fist[robot_idx] <= upper
 
     def test_o20_fist_four_finger_pitch_and_dip_are_valid_urdf_targets(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_FIST_LEFT,
             ROBOT_FIST_RIGHT,
         )
@@ -411,7 +411,7 @@ class TestRobotNameMap:
                 assert lower <= fist[robot_idx] <= upper
 
     def test_o20_thumb_opose_motor_targets(self, monkeypatch):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_OPOSE_LEFT,
             ROBOT_OPOSE_RIGHT,
         )
@@ -555,7 +555,7 @@ class TestRobotNameMap:
             assert list(mapped) == pytest.approx(expected_robot_state)
 
     def test_o20_four_finger_roll_mapping_uses_configured_source_direction(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import FINGER_CONFIGS
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import FINGER_CONFIGS
 
         for config_name in ("index_roll", "middle_roll", "ring_roll", "pinky_roll"):
             assert FINGER_CONFIGS[config_name]["weights"]["v1"] == [1]
@@ -568,7 +568,7 @@ class TestRobotNameMap:
             assert "reverse_output_direction" not in FINGER_CONFIGS[config_name]
 
     def test_o20_right_thumb_abduction_open_and_fist_are_valid_urdf_targets(self):
-        from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+        from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
             ROBOT_FIST_RIGHT,
             ROBOT_ORIGINAL_RIGHT,
         )

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from linkerhand_retarget.motion.linkerforce.config.o20_config import (
+from linkerhand_retarget.motion.linkerforce.config.lffg1.o20_config import (
     ROBOT_FIST_LEFT,
     ROBOT_FIST_RIGHT,
     ROBOT_ORIGINAL_LEFT,
