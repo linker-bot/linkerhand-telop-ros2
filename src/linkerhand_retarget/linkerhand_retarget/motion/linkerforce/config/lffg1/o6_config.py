@@ -4,8 +4,8 @@ FINGER_CONFIGS = {
         'name': '拇指侧摆',
         'joints': [0, 1, 2],
         'weights': {
-            'v1': [0, 0, 1],
-            'v2': [0, 0, 1]
+            'v1': [0, 1, 0],
+            'v2': [0, 1, 0]
         },
         'robot_idx': 0,
         'type': 'thumb',

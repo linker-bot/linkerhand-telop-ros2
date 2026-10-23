@@ -20,7 +20,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
+            'scale_factor': 1.1,
             'extended_exp_factor': 1.0
         }
     },  
@@ -76,7 +76,7 @@ FINGER_CONFIGS = {
         # },
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.9,
+            'scale_factor': 1.2,
             'extended_exp_factor': 2
         }
     },
@@ -138,7 +138,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1.1,
             'extended_exp_factor': 5
         }
     },

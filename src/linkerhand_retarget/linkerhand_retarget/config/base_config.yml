@@ -46,7 +46,7 @@ serial:
   exclude_ports: []
   left:
     baudrate: 2000000
-    port: /dev/ttyUSB1
+    port: /dev/ttyUSB0
   right:
     baudrate: 2000000
     port: /dev/ttyUSB0

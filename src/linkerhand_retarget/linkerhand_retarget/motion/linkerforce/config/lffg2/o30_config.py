@@ -20,8 +20,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
-            'extended_exp_factor': 5
+            'scale_factor': 1.2,
+            'extended_exp_factor': 1
         }
     },
     # 拇指侧摆3个关节的加权系数，人手的0/1/2序列，对应URDF的第2关节(下标1)
@@ -41,8 +41,8 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
-            'extended_exp_factor': 5
+            'scale_factor': 1.5,
+            'extended_exp_factor': 1
         }
     },
     # 拇指根部弯曲3个关节的加权系数，人手的2/3/4序列，对应URDF的第3关节(下标2)
@@ -76,8 +76,8 @@ FINGER_CONFIGS = {
         # },
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
-            'extended_exp_factor': 2
+            'scale_factor': 1.0,
+            'extended_exp_factor': 1
         }
     },
     # 拇指指尖弯曲3个关节的加权系数，人手的2/3/4序列，对应URDF的第4关节(下标3)
@@ -98,7 +98,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 2
+            'extended_exp_factor': 1
         }
     },
     # 食指ROLL旋转（侧摆）关节的加权系数，人手的5序列，对应URDF的第4关节(下标3)
@@ -138,7 +138,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 1.5,
             'extended_exp_factor': 10
         }
     },
@@ -201,7 +201,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 1.5,
             'extended_exp_factor': 10
         }
     },
@@ -263,7 +263,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 1.5,
             'extended_exp_factor': 10
         }
     },
@@ -325,7 +325,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 1.8,
             'extended_exp_factor': 10
         }
     },

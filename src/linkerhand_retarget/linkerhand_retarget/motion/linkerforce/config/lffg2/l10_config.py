@@ -3,8 +3,8 @@ FINGER_CONFIGS = {
         'name': '拇指旋转',
         'joints': [1, 2],
         'weights': {
-            'v1': [1, 0],
-            'v2': [1, 0]
+            'v1': [0, 1],
+            'v2': [0, 1]
         },
         'robot_idx': 0,
         'type': 'thumb',
@@ -15,7 +15,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 0.3,
             'extended_exp_factor': 10
         }
     },
@@ -23,7 +23,7 @@ FINGER_CONFIGS = {
         'name': '拇指侧摆',
         'joints': [0, 1, 2],
         'weights': {
-            'v1': [0, 0, 1],
+            'v1': [0, 1, 0],
             'v2': [0, 1, 0]
         },
         'robot_idx': 1,
@@ -32,7 +32,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.3,
+            'scale_factor': 1.5,
             'extended_exp_factor': 10
         }
     },
@@ -53,7 +53,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 25
+            'extended_exp_factor': 1
         }
     },
     'index_roll': {
@@ -91,7 +91,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.8,
+            'scale_factor': 0.7,
             'extended_exp_factor': 1
         }
     },
@@ -111,7 +111,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.1,
+            'scale_factor': 0.6,
             'extended_exp_factor': 1
         }
     },

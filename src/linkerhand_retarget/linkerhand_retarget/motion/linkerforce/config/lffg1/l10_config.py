@@ -16,7 +16,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 10
+            'extended_exp_factor': 1
         }
     },
     'thumb_abduction': {
@@ -32,7 +32,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.3,
+            'scale_factor': 1.1,
             'extended_exp_factor': 10
         }
     },
@@ -91,7 +91,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.8,
+            'scale_factor': 0.6,
             'extended_exp_factor': 1
         }
     },
@@ -111,7 +111,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.1,
+            'scale_factor': 0.7,
             'extended_exp_factor': 1
         }
     },
@@ -292,7 +292,7 @@ MOTOR_CONSTRAINTS = {
         {'min': 0, 'max': 255, 'enabled': False},   # motor 6: 食指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 7: 无名指侧摆
         {'min': 0, 'max': 255, 'enabled': False},   # motor 8: 小指侧摆
-        {'min': 210, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
+        {'min': 200, 'max': 255, 'enabled': True},   # motor 9: 拇指旋转
     ],
     'right': [
         {'min': 0, 'max': 255, 'enabled': False},   # motor 0: 拇指弯曲
