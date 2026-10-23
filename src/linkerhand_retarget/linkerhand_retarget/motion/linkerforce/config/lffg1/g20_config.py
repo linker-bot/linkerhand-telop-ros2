@@ -20,7 +20,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.0,
+            'scale_factor': 1.1,
             'extended_exp_factor': 1.0
         }
     },  
@@ -76,8 +76,8 @@ FINGER_CONFIGS = {
         # },
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.9,
-            'extended_exp_factor': 5
+            'scale_factor': 1.2,
+            'extended_exp_factor': 2
         }
     },
     # 拇指指尖弯曲3个关节的加权系数，人手的2/3/4序列，对应URDF的第4关节(下标3)
@@ -138,7 +138,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.2,
+            'scale_factor': 1.1,
             'extended_exp_factor': 5
         }
     },

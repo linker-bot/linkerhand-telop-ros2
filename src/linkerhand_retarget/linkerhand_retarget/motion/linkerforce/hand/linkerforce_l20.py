@@ -6,7 +6,7 @@ import numpy as np
 import copy
 from linkerhand.handcore import HandCore
 from linkerhand.calibration_checklist import normalize_calibration_filter_config
-from ..config.l20_config import (
+from ..config.lffg1.l20_config import (
     FINGER_CONFIGS, MAPPING_ORDER, MULTI_SEGMENT_CONFIG,
     ROBOT_ORIGINAL_LEFT, ROBOT_ORIGINAL_RIGHT,
     ROBOT_FIST_LEFT, ROBOT_FIST_RIGHT,
@@ -15,6 +15,11 @@ from ..config.l20_config import (
 )
 from typing import List
 from linkerhand.handcoreex import DynamicWeightMultiStateLinearMapper,MultiStateLinearMapper
+from .simple_linear_mapper import (
+    apply_linkerforce_product_config,
+    resolve_linkerforce_finger_configs,
+    resolve_linkerforce_motor_constraints,
+)
 
 
 class RightHand:
@@ -31,6 +36,8 @@ class RightHand:
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
         self.glove_version = 'v2'
+        self.product_type = None
+        self.product_family = 'LFFG1'
         self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
@@ -57,7 +64,10 @@ class RightHand:
 
 
         # 映射器（v2.8.0专属），具体介绍参考l6_config.py文件
-        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(FINGER_CONFIGS, MAPPING_ORDER, is_debug=is_debug)
+        finger_configs = resolve_linkerforce_finger_configs(
+            FINGER_CONFIGS, None, self.glove_version
+        )
+        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
 
         # 设置动态权重配置（v2.8.2新增）
         for config_name, config in FINGER_CONFIGS.items():
@@ -65,28 +75,22 @@ class RightHand:
                 self.multi_state_mapper.set_dynamic_weight_config(config_name, config['dynamic_weight'])
 
         # 电机输出约束
-        self.motor_constraints = MOTOR_CONSTRAINTS['right']
+        self.motor_constraints = resolve_linkerforce_motor_constraints(
+            MOTOR_CONSTRAINTS, 'right', None, self.glove_version
+        )
 
     def set_glove_version(self, version: str):
-        if not version:
-            return
+        if version:
+            self.set_product_version(self.product_type, version)
 
-        major_version = version.split('.')[0]
-        version_key = f'v{major_version}'
-
-        if version_key == self.glove_version:
-            return
-
-        self.glove_version = version_key
-
-        for finger_name, config in FINGER_CONFIGS.items():
-            if 'weights' in config and isinstance(config['weights'], dict):
-                if version_key in config['weights']:
-                    self.multi_state_mapper.finger_configs[finger_name]['weights'] = config['weights'][version_key]
-
-            if 'reverse_motion' in config and isinstance(config['reverse_motion'], dict):
-                if version_key in config['reverse_motion']:
-                    self.multi_state_mapper.finger_configs[finger_name]['reverse_motion'] = config['reverse_motion'][version_key]
+    def set_product_version(self, product_type: str, firmware_version: str):
+        apply_linkerforce_product_config(
+            self,
+            "l20",
+            'right',
+            product_type,
+            firmware_version,
+        )
 
     def initialize_mapper(self) -> bool:
         """
@@ -304,6 +308,8 @@ class LeftHand:
         self.calibrationfistpose = None    # 握拳标定值 (对应0)
         self.calibrationopose = None       # O型标定值 (对应中间值)
         self.glove_version = 'v2'
+        self.product_type = None
+        self.product_family = 'LFFG1'
         self.calibration_filter_config = normalize_calibration_filter_config(CALIBRATION_FILTER_CONFIG)
         
         # ========== 平滑滤波参数 ==========
@@ -330,7 +336,10 @@ class LeftHand:
 
 
         # 映射器（v2.8.0专属），具体介绍参考l6_config.py文件
-        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(FINGER_CONFIGS, MAPPING_ORDER, is_debug=is_debug)
+        finger_configs = resolve_linkerforce_finger_configs(
+            FINGER_CONFIGS, None, self.glove_version
+        )
+        self.multi_state_mapper = DynamicWeightMultiStateLinearMapper(finger_configs, MAPPING_ORDER, is_debug=is_debug)
 
         # 设置动态权重配置（v2.8.2新增）
         for config_name, config in FINGER_CONFIGS.items():
@@ -338,28 +347,22 @@ class LeftHand:
                 self.multi_state_mapper.set_dynamic_weight_config(config_name, config['dynamic_weight'])
 
         # 电机输出约束
-        self.motor_constraints = MOTOR_CONSTRAINTS['left']
+        self.motor_constraints = resolve_linkerforce_motor_constraints(
+            MOTOR_CONSTRAINTS, 'left', None, self.glove_version
+        )
 
     def set_glove_version(self, version: str):
-        if not version:
-            return
+        if version:
+            self.set_product_version(self.product_type, version)
 
-        major_version = version.split('.')[0]
-        version_key = f'v{major_version}'
-
-        if version_key == self.glove_version:
-            return
-
-        self.glove_version = version_key
-
-        for finger_name, config in FINGER_CONFIGS.items():
-            if 'weights' in config and isinstance(config['weights'], dict):
-                if version_key in config['weights']:
-                    self.multi_state_mapper.finger_configs[finger_name]['weights'] = config['weights'][version_key]
-
-            if 'reverse_motion' in config and isinstance(config['reverse_motion'], dict):
-                if version_key in config['reverse_motion']:
-                    self.multi_state_mapper.finger_configs[finger_name]['reverse_motion'] = config['reverse_motion'][version_key]
+    def set_product_version(self, product_type: str, firmware_version: str):
+        apply_linkerforce_product_config(
+            self,
+            "l20",
+            'left',
+            product_type,
+            firmware_version,
+        )
 
     def initialize_mapper(self) -> bool:
         """

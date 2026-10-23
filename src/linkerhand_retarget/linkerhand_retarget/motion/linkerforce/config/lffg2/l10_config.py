@@ -3,8 +3,8 @@ FINGER_CONFIGS = {
         'name': '拇指旋转',
         'joints': [1, 2],
         'weights': {
-            'v1': [1, 0],
-            'v2': [1, 0]
+            'v1': [0, 1],
+            'v2': [0, 1]
         },
         'robot_idx': 0,
         'type': 'thumb',
@@ -15,7 +15,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1,
+            'scale_factor': 0.3,
             'extended_exp_factor': 10
         }
     },
@@ -23,7 +23,7 @@ FINGER_CONFIGS = {
         'name': '拇指侧摆',
         'joints': [0, 1, 2],
         'weights': {
-            'v1': [0, 0, 1],
+            'v1': [0, 1, 0],
             'v2': [0, 1, 0]
         },
         'robot_idx': 1,
@@ -32,7 +32,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.3,
+            'scale_factor': 1.5,
             'extended_exp_factor': 10
         }
     },
@@ -53,7 +53,7 @@ FINGER_CONFIGS = {
         'extended_mapping': {
             'enabled': True,
             'scale_factor': 1,
-            'extended_exp_factor': 25
+            'extended_exp_factor': 1
         }
     },
     'index_roll': {
@@ -74,7 +74,7 @@ FINGER_CONFIGS = {
             'enabled': False,
             'scale_factor': 1.0,
         }
-    },   
+    },
     'index_root_flexion': {
         'name': '食指',
         'joints': [6, 7, 8],
@@ -91,7 +91,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 0.8,
+            'scale_factor': 0.7,
             'extended_exp_factor': 1
         }
     },
@@ -111,7 +111,7 @@ FINGER_CONFIGS = {
         'dynamic_weight': None,
         'extended_mapping': {
             'enabled': True,
-            'scale_factor': 1.1,
+            'scale_factor': 0.6,
             'extended_exp_factor': 1
         }
     },
@@ -197,11 +197,11 @@ FINGER_CONFIGS = {
 
 MAPPING_ORDER = [
     'thumb_rotate', 'thumb_abduction', 'thumb_root_flexion',
-    'index_roll','index_root_flexion', 
-    'middle_root_flexion', 
-    'ring_roll', 'ring_root_flexion', 
+    'index_roll','index_root_flexion',
+    'middle_root_flexion',
+    'ring_roll', 'ring_root_flexion',
     'pinky_roll', 'pinky_root_flexion',
-    
+
 ]
 
 CALIBRATION_FILTER_CONFIG = {
@@ -231,7 +231,7 @@ MULTI_SEGMENT_CONFIG = {
 MULTI_SEGMENT_CONFIG_FROZEN = tuple(MULTI_SEGMENT_CONFIG['states'])
 
 ROBOT_OPOSE_LEFT = [
-    0.13, 1.13, 0.28, 0.0, 0.0, 
+    0.13, 1.13, 0.28, 0.0, 0.0,
     0.0, 0.73, 0.0, 0.0,
          0.73, 0.0, 0.0,
     0.0, 0.73, 0.0, 0.0,
@@ -239,7 +239,7 @@ ROBOT_OPOSE_LEFT = [
 ]
 
 ROBOT_OPOSE_RIGHT = [
-    0.13, 1.13, 0.28, 0.0, 0.0, 
+    0.13, 1.13, 0.28, 0.0, 0.0,
     0.0, 0.73, 0.0, 0.0,
          0.73, 0.0, 0.0,
     0.0, 0.73, 0.0, 0.0,
@@ -247,7 +247,7 @@ ROBOT_OPOSE_RIGHT = [
 ]
 
 ROBOT_ORIGINAL_LEFT = [
-    0.0, 0.0, 0.0, 0.0, 0.0, 
+    0.0, 0.0, 0.0, 0.0, 0.0,
     0.22, 0.0, 0.0, 0.0,
           0.0, 0.0, 0.0,
     -0.22, 0.0, 0.0, 0.0,
@@ -255,7 +255,7 @@ ROBOT_ORIGINAL_LEFT = [
 ]
 
 ROBOT_ORIGINAL_RIGHT = [
-    0.0, 0.0, 0.0, 0.0, 0.0, 
+    0.0, 0.0, 0.0, 0.0, 0.0,
     -0.22, 0.0, 0.0, 0.0,
            0.0, 0.0, 0.0,
     0.22, 0.0, 0.0, 0.0,

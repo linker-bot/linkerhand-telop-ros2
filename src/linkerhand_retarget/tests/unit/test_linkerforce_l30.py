@@ -3,6 +3,8 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 _PACKAGE_DIR = Path(__file__).parents[2] / "linkerhand_retarget"
 if str(_PACKAGE_DIR) not in sys.path:
     sys.path.insert(0, str(_PACKAGE_DIR))
@@ -54,6 +56,32 @@ class FakeNode:
         return SimpleNamespace(info=lambda *args, **kwargs: None)
 
 
+@pytest.mark.parametrize("hand_class_name", ["RightHand", "LeftHand"])
+def test_l30_uncalibrated_fallback_keeps_its_qpos_mapping(monkeypatch, hand_class_name):
+    from linkerhand_retarget.motion.linkerforce.hand import linkerforce_l30, linkerforce_o30
+
+    hand = getattr(linkerforce_l30, hand_class_name)(FakeHandCore())
+    hand.smooth_enabled = False
+    captured = {}
+    monkeypatch.setattr(
+        linkerforce_o30,
+        "_sync_o30_fallback_arcs",
+        lambda *_args: pytest.fail("L30 must not use O30 fallback arcs"),
+    )
+    monkeypatch.setattr(
+        hand,
+        "_set_g_jointpositions_from_qpos",
+        lambda qpos: captured.update(qpos=list(qpos)),
+    )
+
+    pose = [0.0] * 21
+    pose[1] = 4.0
+    pose[2] = 0.4
+    hand.joint_update(pose)
+
+    assert captured["qpos"][17] == pytest.approx(-1.0)
+
+
 L30_EXPECTED_TOPIC_NAMES = (
     "拇指指根",
     "拇指指尖",
@@ -76,7 +104,7 @@ L30_EXPECTED_TOPIC_NAMES = (
 )
 
 
-def test_linkerforce_retarget_routes_l30_to_placeholder_hand_classes(monkeypatch):
+def test_linkerforce_retarget_routes_l30_to_independent_hand_classes(monkeypatch):
     _install_ros_stubs(monkeypatch)
 
     from linkerhand.constants import RobotName
@@ -102,7 +130,7 @@ def test_linkerforce_retarget_routes_l30_to_placeholder_hand_classes(monkeypatch
     assert isinstance(retarget.lefthand, LeftHand)
 
 
-def test_l30_placeholder_mapping_uses_declared_topic_order_and_skips_wrist_for_display():
+def test_l30_mapping_uses_declared_topic_order_and_skips_wrist_for_display():
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_l30 import RightHand
 
     hand = RightHand(FakeHandCore())
@@ -120,7 +148,7 @@ def test_l30_placeholder_mapping_uses_declared_topic_order_and_skips_wrist_for_d
     )
 
 
-def test_l30_placeholder_mapping_outputs_declared_motor_ranges():
+def test_l30_mapping_outputs_declared_motor_ranges():
     from linkerhand_retarget.motion.linkerforce.hand.linkerforce_l30 import RightHand
 
     hand = RightHand(FakeHandCore())
@@ -139,3 +167,25 @@ def test_l30_placeholder_mapping_outputs_declared_motor_ranges():
     assert hand.g_jointpositions[11] == -200
     assert hand.g_jointpositions[16] == 0
     assert hand.g_jointpositions[17] == 0
+
+
+def test_l30_keeps_its_own_mapper_and_product_config():
+    from linkerhand_retarget.motion.linkerforce.hand import linkerforce_l30
+    from linkerhand_retarget.motion.linkerforce.config.lffg1.l30_config import (
+        FINGER_CONFIGS as L30_FINGER_CONFIGS,
+        MOTOR_CONSTRAINTS as L30_MOTOR_CONSTRAINTS,
+    )
+
+    hand = linkerforce_l30.RightHand(FakeHandCore())
+
+    assert linkerforce_l30.FINGER_CONFIGS is L30_FINGER_CONFIGS
+    assert hand.product_config_module.__name__.endswith("config.lffg1.l30_config")
+    assert len(hand.multi_state_mapper.finger_configs) == 16
+    assert len(hand.motor_constraints) == 18
+    assert len(L30_MOTOR_CONSTRAINTS["left"]) == 18
+
+    hand.set_product_version("LFFG2-L30-V01", "3.1.3")
+    assert hand.product_family == "LFFG2"
+    assert hand.glove_version == "v1"
+    assert hand.product_config_module.__name__.endswith("config.lffg2.l30_config")
+    assert isinstance(hand.multi_state_mapper.finger_configs["thumb_rotate"]["weights"], list)

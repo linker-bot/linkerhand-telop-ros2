@@ -391,7 +391,7 @@ def test_o30_left_mujoco_display_keeps_thumb_cmc_yaw_direction():
 
 
 def test_o30_right_mujoco_display_keeps_thumb_cmc_roll_and_yaw_direction():
-    from linkerhand_retarget.motion.linkerforce.config.o30_config import (
+    from linkerhand_retarget.motion.linkerforce.config.lffg1.o30_config import (
         ROBOT_FIST_RIGHT,
         ROBOT_OPOSE_RIGHT,
         ROBOT_ORIGINAL_RIGHT,

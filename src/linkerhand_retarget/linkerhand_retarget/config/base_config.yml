@@ -21,7 +21,7 @@ motor_output:
     max_runtime_ms: 300.0
   frame_rate: 30
 mujoco:
-  enabled: false
+  enabled: true
   fps: 30
   hands: auto
   model_rotate_rpy:
@@ -46,7 +46,7 @@ serial:
   exclude_ports: []
   left:
     baudrate: 2000000
-    port: /dev/ttyUSB1
+    port: /dev/ttyUSB0
   right:
     baudrate: 2000000
     port: /dev/ttyUSB0
@@ -62,8 +62,8 @@ system:
   motion_type: linkerforce
   retargeting_type: projection
   rightpub: true
-  robotname_l: o6
-  robotname_r: o6
+  robotname_l: o30
+  robotname_r: o30
   sapientype: left
   usecan: false
   usegui: false
