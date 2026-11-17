@@ -35,7 +35,8 @@ POSITION_QUERY_COMMAND_VALUES = {
 }
 DEFAULT_POSITION_QUERY_COMMAND = CommandCode.POSITION_QUERY.value
 POSITION_QUERY_COMPRESSED_MIN_VERSION = (2, 1, 5)
-PRODUCT_VERSION_QUERY_FIRMWARE = (3, 1, 3)
+PRODUCT_VERSION_QUERY_MIN_FIRMWARE = (3, 1, 3)
+PRODUCT_VERSION_QUERY_MAX_FIRMWARE = (3, 9, 9)
 
 
 # 协议常量
@@ -974,7 +975,13 @@ class ForceSerialReader:
                 while True:
                     self._poll_serial_frames_once(parser)
                     if self.handtype is not None:
-                        if parse_linkerforce_version(self.version) == PRODUCT_VERSION_QUERY_FIRMWARE:
+                        firmware_version = parse_linkerforce_version(self.version)
+                        if (
+                            firmware_version is not None
+                            and PRODUCT_VERSION_QUERY_MIN_FIRMWARE
+                            <= firmware_version
+                            <= PRODUCT_VERSION_QUERY_MAX_FIRMWARE
+                        ):
                             self._query_product_version_sync(parser, response_wait)
                         return True
                     if time.time() >= deadline:

@@ -442,13 +442,29 @@ class TestForceSerialReaderVersionQuery:
             CommandCode.PRODUCT_VERSION_QUERY.value,
         )
 
-    def test_product_version_query_is_sent_only_for_firmware_313(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "firmware, expected_version, query_product",
+        [
+            (20105, "2.1.5", False),
+            (30102, "3.1.2", False),
+            (30103, "3.1.3", True),
+            (30104, "3.1.4", True),
+            (30201, "3.2.1", True),
+            (30909, "3.9.9", True),
+            (30910, "3.9.10", False),
+            (31000, "3.10.0", False),
+            (40000, "4.0.0", False),
+        ],
+    )
+    def test_product_version_query_firmware_bounds(
+        self, monkeypatch, firmware, expected_version, query_product
+    ):
         monkeypatch.setattr(
             "linkerhand_retarget.linkerhand.linkerforce.time.sleep",
             lambda _seconds: None,
         )
 
-        firmware_payload = struct.pack("<IB", 30103, 1)
+        firmware_payload = struct.pack("<IB", firmware, 1)
         firmware_frame = FrameHandler.pack_data(
             CommandCode.VERSION_QUERY.value,
             firmware_payload,
@@ -490,12 +506,12 @@ class TestForceSerialReaderVersionQuery:
         reader.serial_port = serial_port
 
         assert reader.query_version_sync(response_wait=0) is True
-        assert reader.version == "3.1.3"
-        assert reader.product_version == "LinkerForce-O30"
-        assert serial_port.writes == [
-            reader.pack_01_data(),
-            reader.pack_09_data(),
-        ]
+        assert reader.version == expected_version
+        assert reader.product_version == ("LinkerForce-O30" if query_product else None)
+        expected_writes = [reader.pack_01_data()]
+        if query_product:
+            expected_writes.append(reader.pack_09_data())
+        assert serial_port.writes == expected_writes
 
     def test_position_packet_logging_flag_is_passed_to_frame_handler(self):
         reader = ForceSerialReader(HandType.right, log_position_packets=True)
