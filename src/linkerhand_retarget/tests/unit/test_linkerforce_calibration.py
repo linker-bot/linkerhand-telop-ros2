@@ -1,6 +1,8 @@
 import sys
 import types
 import json
+import math
+import pytest
 from types import SimpleNamespace
 
 
@@ -645,3 +647,57 @@ def test_real_retargetrun_returns_false_and_skips_mujoco_when_process_fails(monk
     assert node.retargetrun() is False
     assert events["process_called"] == 1
     assert events["mujoco_called"] == 0
+
+
+@pytest.mark.parametrize("show_fist", [False, True])
+@pytest.mark.parametrize("versions", [
+    ("3.1.3", "3.2.1"),
+    ("3.9.9", "3.1.2"),
+    ("3.1.2", "3.9.9"),
+    ("3.9.10", "4.0.0"),
+    (None, "unknown"),
+])
+def test_fixed_side_splay_calibration_is_versioned_and_saved(
+    monkeypatch, tmp_path, show_fist, versions
+):
+    install_ros_stubs(monkeypatch)
+    from linkerhand_retarget.motion.linkerforce import retarget as module
+    from linkerhand.constants import RobotName
+
+    retarget = module.Retarget.__new__(module.Retarget)
+    retarget.node = SimpleNamespace(get_logger=lambda: FakeLogger())
+    retarget.force_reader_left = SimpleNamespace(handtype="Left", version=versions[0])
+    retarget.force_reader_right = SimpleNamespace(handtype="Right", version=versions[1])
+    retarget.lefthand = make_hand()
+    retarget.righthand = make_hand()
+    retarget.robot_name_l = retarget.robot_name_r = RobotName.o30
+    retarget.show_fist_calibration = show_fist
+    retarget.fist_extend_ratio = 0.5
+    samples = iter(([4.0] * 21, [2.0] * 21, [1.0] * 21) if show_fist
+                   else ([2.0] * 21, [1.0] * 21))
+
+    def collect(_window):
+        sample = next(samples)
+        retarget.calibration_data_left = [sample.copy()]
+        retarget.calibration_data_right = [sample.copy()]
+
+    monkeypatch.setattr(retarget, "_calibration_with_progress", collect)
+    cache = tmp_path / "calibration.json"
+    monkeypatch.setattr(module, "TMP_FILE_PATH", cache)
+    assert retarget.run_calibration() is True
+    saved = json.loads(cache.read_text())
+
+    for side, version, direction in zip(("l", "r"), versions, (-1, 1)):
+        fixed = version in ("3.1.3", "3.2.1", "3.9.9")
+        hand = retarget.lefthand if side == "l" else retarget.righthand
+        for pose, attr, sampled in (
+            ("original", "calibrationoriginal", 1.0),
+            ("opose", "calibrationopose", 2.0),
+            ("fist", "calibrationfistpose", 4.0 if show_fist else 2.5),
+        ):
+            expected = [sampled] * 21
+            if fixed:
+                for index, offset in ((5, 10), (9, 0), (13, -10), (17, -10)):
+                    expected[index] = 3.14 + (direction * math.radians(offset) if pose == "original" else 0)
+            assert getattr(hand, attr) == pytest.approx(expected)
+            assert saved[f"jointangle{pose}_{side}"] == pytest.approx(expected)

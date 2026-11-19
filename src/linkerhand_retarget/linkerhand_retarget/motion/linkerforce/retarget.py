@@ -23,7 +23,11 @@ if _project_root_str in sys.path:
     sys.path.remove(_project_root_str)
 sys.path.insert(0, _project_root_str)
 
-from linkerhand.linkerforce import ForceSerialReader, append_linkerforce_abnormal_log
+from linkerhand.linkerforce import (
+    ForceSerialReader,
+    append_linkerforce_abnormal_log,
+    parse_linkerforce_version,
+)
 from linkerhand.constants import RobotName, ROBOT_LEN_MAP, HandType
 from linkerhand.handcore import HandCore
 from tqdm import tqdm
@@ -1738,6 +1742,7 @@ class Retarget():
                 return False
 
             self._calculate_fist_from_extension()
+        self._apply_fixed_side_splay_calibration()
         # ===== 保存标定数据 =====
         if self._save_to_tmp():
             print(f"\n{Fore.GREEN}{'='*50}{Fore.RESET}")
@@ -1748,6 +1753,31 @@ class Retarget():
         self._current_calibration_pose = None
         self._initialize_ready_mappers()
         return True
+
+    def _apply_fixed_side_splay_calibration(self):
+        """新版手套四指侧摆使用固定锚点，其余通道保留采集值。"""
+        for side, hand, reader, direction in (
+            ("left", self.lefthand, self.force_reader_left, -1),
+            ("right", self.righthand, self.force_reader_right, 1),
+        ):
+            if not self._is_reader_connected(side):
+                continue
+            version = parse_linkerforce_version(getattr(reader, "version", None))
+            if version is None or not (3, 1, 3) <= version <= (3, 9, 9):
+                continue
+
+            poses = (hand.calibrationoriginal, hand.calibrationopose, hand.calibrationfistpose)
+            if any(pose is None or len(pose) <= 17 for pose in poses):
+                self.node.get_logger().warn(f"[固定侧摆标定] {side} 标定数据不完整，跳过固定值")
+                continue
+
+            for index, degrees in ((5, 10), (9, 0), (13, -10), (17, -10)):
+                hand.calibrationoriginal[index] = 3.14 + direction * math.radians(degrees)
+                hand.calibrationopose[index] = 3.14
+                hand.calibrationfistpose[index] = 3.14
+            self.node.get_logger().info(
+                f"[固定侧摆标定] {side} 固件 {reader.version}，通道 [5, 9, 13, 17] 已应用固定值"
+            )
 
     def _calculate_fist_from_extension(self):
         """

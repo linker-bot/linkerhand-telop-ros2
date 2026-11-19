@@ -2,6 +2,8 @@
 
 ## v2.12.10
 
+- 优化 LinkerForce 固件 `3.1.3` 至 `3.9.9`（含边界）的标定：新增按左右手独立判断的固定侧摆标定分支，通道索引 `5/9/13/17` 的 O 型与握拳固定为 `3.14 rad`；张手以此为基准，左手偏移 `-10°/0°/+10°/+10°`，右手方向相反。兼容两姿势自动推算握拳及三姿势采集流程，其余通道保留采集值。
+
 - LinkerMCG 三分类：新增标准配置名 `motion_type: linkermcg_g7`，旧 `linkermcg` 保留为兼容别名；LinkerMCG 明确区分为 G7、M7、M11 三种；G7 不支持 O30，O30 仅支持 `linkerforce` 与 `linkermcg_m11`。
 - 新增 LinkerMCG M11 独立 UDP motion 模块，基于共享 M 系列核心，支持 O20 16 路目标角度协议（`linker.o20.targetpos16.flat.v1`）和 O30 行程协议（`linker.o30.stroke20.flat.v1`）。
 - 收敛 LinkerMCG M7 能力：移除 O30 支持，M7/M11 共用 M 系列内核与手部适配，减少重复逻辑和命名歧义。
@@ -11,7 +13,7 @@
 - 修复 O30 左手模型：更新镜像网格与 URDF 关节轴、零位和限位，使左手模型与实物标定方向一致，修正 MCP roll 方向及 thumb_cmc_yaw 卡在零位的问题。
 - 修复 handretarget 启动崩溃：统一 `linkerhand` 导入路径，消除同名枚举被加载成双份导致的 LinkerForce 初始化失败（`Retarget` 缺少 `lefthand`）。
 - LinkerForce 输出帧率改为按配置读取，支持通过 `motor_output.frame_rate` 调整运行调度频率。
-- 新增 LinkerForce `0x09` 产品版本查询：仅固件 `3.1.3` 发送查询，响应内容按 ASCII 原样解析。
+- 新增 LinkerForce `0x09` 产品版本查询：固件版本在 `3.1.3` 至 `3.9.9`（含边界）时发送查询，响应内容按 ASCII 原样解析；修复 `3.2.1` 等范围内固件不查询产品型号的问题，补充版本上下边界回归测试。
 - 重构 LinkerForce 型号配置：各型号配置按产品族拆分至 `config/lffg1/` 与 `config/lffg2/`，配置文件保留原有扁平 `v1/v2` 形式；运行时按产品型号加载对应目录，并按左右手应用 `weights`、`reverse_motion`、`extended_mapping` 与电机约束。LFFG2 产品号以 V01 识别 v1，其余 LFFG2 为 v2；非 LFFG2 或空型号按固件主版本选择（1.x/3.x 为 v1，2.x 为 v2）。
 - 调整 LinkerForce 触觉反馈：新增斜率增益（`slope_gain`）放大映射，触觉质量话题更新为 `*_matrix_touch_mass`。
 - 修复 UdexReal 启动流程：UDP 初始化失败明确返回失败、成功明确返回成功，避免节点启动后未进入 ROS2 事件循环而直接退出。
