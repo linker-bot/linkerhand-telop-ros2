@@ -2,6 +2,8 @@
 
 ## v2.12.10
 
+- 优化 LinkerForce 固件 `3.1.3` 至 `3.9.9`（含边界）的标定：新增按左右手独立判断的固定侧摆标定分支，通道索引 `5/9/13/17` 的 O 型与握拳固定为 `3.14 rad`；张手以此为基准，左手偏移 `-10°/0°/+10°/+10°`，右手方向相反。兼容两姿势自动推算握拳及三姿势采集流程，其余通道保留采集值。
+
 - LinkerMCG 三分类：新增标准配置名 `motion_type: linkermcg_g7`，旧 `linkermcg` 保留为兼容别名；LinkerMCG 明确区分为 G7、M7、M11 三种；G7 不支持 O30，O30 仅支持 `linkerforce` 与 `linkermcg_m11`。
 - 新增 LinkerMCG M11 独立 UDP motion 模块，基于共享 M 系列核心，支持 O20 16 路目标角度协议（`linker.o20.targetpos16.flat.v1`）和 O30 行程协议（`linker.o30.stroke20.flat.v1`）。
 - 收敛 LinkerMCG M7 能力：移除 O30 支持，M7/M11 共用 M 系列内核与手部适配，减少重复逻辑和命名歧义。
